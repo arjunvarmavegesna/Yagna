@@ -70,6 +70,7 @@ Staff open the URL, and the first time they use an AI feature they enter the **P
 
 ## Pre-launch test checklist (do on a real phone, over the HTTPS URL)
 
+- [ ] **Login gate:** opening the site shows the access-code login screen. A wrong code is rejected ("Incorrect access code"); the correct code lets you in and you stay logged in on refresh. The header **🔓 Logout** button returns you to the login screen.
 - [ ] **AI works:** PharmAudit → snap a medicine photo → "Read photos" fills the form. Drug Enrichment returns filled rows (not "⚠ Failed").
 - [ ] **Key is hidden:** open the browser's DevTools → Network during an AI call → confirm you only see `/api/anthropic` with `x-access-code`, and **no** `sk-ant-` key anywhere.
 - [ ] **Access gate:** enter a wrong code → AI calls show "Invalid access code".

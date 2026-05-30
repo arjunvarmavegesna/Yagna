@@ -24,6 +24,18 @@ html,body{background:var(--bg);color:var(--text);font-family:'Space Grotesk',san
 .app-brand{font-size:1rem;font-weight:700;display:flex;align-items:center;gap:0.4rem}
 .api-key-btn{background:rgba(255,255,255,0.15);border:none;color:#fff;border-radius:7px;padding:0.3rem 0.7rem;font-size:0.72rem;font-weight:600;cursor:pointer;font-family:'Space Grotesk',sans-serif}
 
+/* ── LOGIN GATE ── */
+#login-gate{position:fixed;inset:0;z-index:9999;background:linear-gradient(160deg,#1a472a,#0f2e1b);display:flex;align-items:center;justify-content:center;padding:1.5rem}
+.login-card{background:#fff;border-radius:18px;padding:2.2rem 1.6rem;width:100%;max-width:340px;box-shadow:0 20px 60px rgba(0,0,0,0.35);text-align:center}
+.login-logo{font-size:1.5rem;font-weight:700;color:var(--accent);display:flex;align-items:center;justify-content:center;gap:0.4rem}
+.login-sub{font-size:0.78rem;color:var(--muted);margin-top:0.3rem;margin-bottom:1.5rem}
+.login-card input{width:100%;padding:0.85rem 0.9rem;border:1.5px solid var(--border);border-radius:10px;font-size:1rem;font-family:'Space Grotesk',sans-serif;text-align:center;letter-spacing:0.06em}
+.login-card input:focus{outline:none;border-color:var(--accent2)}
+.login-btn{width:100%;margin-top:0.9rem;padding:0.85rem;background:var(--accent);color:#fff;border:none;border-radius:10px;font-size:0.95rem;font-weight:700;cursor:pointer;font-family:'Space Grotesk',sans-serif}
+.login-btn:disabled{opacity:0.6;cursor:default}
+.login-err{color:var(--red);font-size:0.78rem;margin-top:0.7rem;min-height:1.1rem;font-weight:600}
+.login-hint{color:var(--muted);font-size:0.68rem;margin-top:1.1rem}
+
 /* ── BOTTOM NAV ── */
 .bottom-nav{position:fixed;bottom:0;left:0;right:0;background:var(--surface);border-top:1px solid var(--border);display:flex;z-index:300;height:58px}
 .nav-btn{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:0.15rem;border:none;background:transparent;cursor:pointer;font-family:'Space Grotesk',sans-serif;transition:all 0.15s;padding:0.3rem 0;position:relative}
@@ -308,10 +320,22 @@ table.data-tbl tr:hover td{background:var(--bg)}
 </head>
 <body>
 
+<!-- ══ LOGIN GATE ══ -->
+<div id="login-gate">
+  <div class="login-card">
+    <div class="login-logo">💊 Yagna Med</div>
+    <div class="login-sub">Pharmacy Intelligence Suite</div>
+    <input type="password" id="login-input" placeholder="Access code" autocomplete="off" onkeydown="if(event.key==='Enter')doLogin()">
+    <button class="login-btn" id="login-btn" onclick="doLogin()">Enter</button>
+    <div class="login-err" id="login-err"></div>
+    <div class="login-hint">Ask your pharmacy admin for the access code</div>
+  </div>
+</div>
+
 <!-- ══ TOP HEADER ══ -->
 <header class="app-hdr">
   <div class="app-brand">⚕ Yagna Med</div>
-  <button class="api-key-btn" onclick="openApiModal()">🔑 API Key</button>
+  <button class="api-key-btn" onclick="doLogout()">🔓 Logout</button>
 </header>
 
 <!-- ══ VIEWS ══ -->
@@ -841,10 +865,52 @@ let paCurrentTab = 'capture';
 //  INIT
 // ══════════════════════════════════════════════════════
 window.addEventListener('load', () => {
-  const k = sessionStorage.getItem('ym_key');
-  if (k) { apiKey = k; document.getElementById('api-key-input').value = k; }
+  const k = localStorage.getItem('ym_key') || sessionStorage.getItem('ym_key');
+  if (k) {
+    apiKey = k;
+    const inp = document.getElementById('api-key-input'); if (inp) inp.value = k;
+    // Re-verify the saved code against the server; if it's wrong (e.g. the code was rotated), force re-login.
+    fetch('/api/login', { method:'POST', headers:{ 'x-access-code': k } })
+      .then(res => { if (res.ok) hideLoginGate(); else doLogout(); })
+      .catch(() => hideLoginGate()); // offline but previously logged in — allow in for offline features
+  }
   initDB();
 });
+
+// ══════════════════════════════════════════════════════
+//  LOGIN GATE
+// ══════════════════════════════════════════════════════
+function hideLoginGate() { const g = document.getElementById('login-gate'); if (g) g.style.display = 'none'; }
+function showLoginGate() {
+  const g = document.getElementById('login-gate'); if (g) g.style.display = 'flex';
+  const li = document.getElementById('login-input'); if (li) { li.value = ''; setTimeout(() => li.focus(), 50); }
+}
+async function doLogin() {
+  const code = document.getElementById('login-input').value.trim();
+  const err = document.getElementById('login-err');
+  const btn = document.getElementById('login-btn');
+  if (!code) { err.textContent = 'Enter the access code'; return; }
+  btn.disabled = true; btn.textContent = 'Checking…'; err.textContent = '';
+  try {
+    const res = await fetch('/api/login', { method:'POST', headers:{ 'x-access-code': code } });
+    if (res.ok) {
+      apiKey = code;
+      localStorage.setItem('ym_key', code);
+      sessionStorage.setItem('ym_key', code);
+      const inp = document.getElementById('api-key-input'); if (inp) inp.value = code;
+      hideLoginGate();
+    } else if (res.status === 401) {
+      err.textContent = 'Incorrect access code';
+    } else {
+      err.textContent = 'Login unavailable — try again';
+    }
+  } catch (e) { err.textContent = 'Network error — check connection'; }
+  btn.disabled = false; btn.textContent = 'Enter';
+}
+function doLogout() {
+  localStorage.removeItem('ym_key'); sessionStorage.removeItem('ym_key'); apiKey = '';
+  showLoginGate();
+}
 
 // ══════════════════════════════════════════════════════
 //  NAVIGATION
@@ -1144,7 +1210,7 @@ async function runEnrichment() {
   const raw = document.getElementById('de-input').value;
   const brands = raw.split('\n').map(l=>l.trim()).filter(Boolean);
   if (!brands.length) { toast('⚠ Enter at least one brand name'); return; }
-  if (!apiKey) { openApiModal(); toast('⚠ Set your API key first'); return; }
+  if (!apiKey) { showLoginGate(); toast('⚠ Log in first'); return; }
   const btn = document.getElementById('de-run-btn');
   btn.disabled = true; btn.textContent = '⏳ Running...';
   deResults = brands.map(b => ({ brand:b, ilo:'', group:'', generic:'', category:'', packSize:'', marketedBy:'', mfr:'', source:'pending' }));
@@ -1441,7 +1507,7 @@ function renderPAStrip() {
 // AI Extract
 async function paExtract() {
   if(!paPhotos.length)return;
-  if(!apiKey){openApiModal();toast('⚠ Enter access code first');return;}
+  if(!apiKey){showLoginGate();toast('⚠ Log in first');return;}
   const btn=document.getElementById('pa-ai-btn'); btn.disabled=true;
   setPABar('loading',`Reading ${paPhotos.length} photo(s)...`);
   try {
