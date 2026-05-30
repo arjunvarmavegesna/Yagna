@@ -229,6 +229,8 @@ table.data-tbl tr:hover td{background:var(--bg)}
 .sys-sep{color:var(--muted);font-size:0.75rem;flex-shrink:0}
 .sys-input{flex:1;border:1.5px solid var(--border);border-radius:7px;padding:0.38rem 0.55rem;font-family:'JetBrains Mono',monospace;font-size:0.92rem;font-weight:700;color:var(--text);background:var(--surface);outline:none;text-align:center;min-width:0}
 .sys-input:focus{border-color:var(--accent)}
+.sys-locked{flex:1;border:1.5px solid var(--accent-lt);border-radius:7px;padding:0.38rem 0.55rem;font-family:'JetBrains Mono',monospace;font-size:0.92rem;font-weight:700;color:var(--accent);background:var(--accent-lt);text-align:center;min-width:0;display:flex;align-items:center;justify-content:center;gap:0.3rem}
+.sys-locked .lock-ic{font-size:0.7rem;opacity:0.6}
 .sys-diff{font-family:'JetBrains Mono',monospace;font-size:0.8rem;font-weight:700;flex-shrink:0;min-width:46px;text-align:right}
 .sys-diff.pos{color:var(--amber)}.sys-diff.neg{color:var(--blue)}.sys-diff.zero{color:var(--ok)}
 .ec-actions{display:grid;grid-template-columns:1fr 1fr 1fr 40px;gap:0.35rem}
@@ -1102,7 +1104,10 @@ function paApplyRemote(data){
   paApplyingRemote = false;
   savePA();
   renderQueue(); updatePASummary();
-  if (typeof paCurrentTab !== 'undefined' && paCurrentTab === 'review') renderReview();
+  // Don't re-render the review list while someone is actively typing into a field there.
+  const ae = document.activeElement;
+  const editingReview = ae && ae.tagName === 'INPUT' && ae.classList && ae.classList.contains('sys-input');
+  if (typeof paCurrentTab !== 'undefined' && paCurrentTab === 'review' && !editingReview) renderReview();
   if (typeof updateHomeStats === 'function') updateHomeStats();
 }
 function paShowSessionLive(code){
@@ -1832,7 +1837,7 @@ function renderReview() {
       <div class="sys-row">
         <span class="sys-lbl">PS</span><span class="sys-ps">${ps}</span>
         <span class="sys-sep">↔</span><span class="sys-lbl">SYS</span>
-        <input class="sys-input" type="number" inputmode="numeric" placeholder="Enter SYS" value="${e.sys}" oninput="setSys(${e.id},this.value)">
+        ${(e.sys!==''&&e.sys!=null)?`<span class="sys-locked" title="Locked — tap ✏ Edit to change">${e.sys}<span class="lock-ic">🔒</span></span>`:`<input class="sys-input" type="number" inputmode="numeric" placeholder="Enter SYS" onchange="setSys(${e.id},this.value)" onkeydown="if(event.key==='Enter')this.blur()">`}
         <span class="sys-diff ${diffCls}" id="diff-${e.id}">${diffStr}</span>
       </div>
       <div class="ec-actions">
@@ -1845,13 +1850,10 @@ function renderReview() {
   }).join('');
 }
 function setSys(id,val) {
-  const e=paEntries.find(x=>x.id===id);if(!e)return;e.sys=val;
-  const st2=paComputeStatus(e);const card=document.getElementById('ec-'+id);
-  if(card){card.className=`entry-card st-${st2}`;const pEl=card.querySelector('.pill');if(pEl)pEl.outerHTML=paStatusPill(st2);}
-  const ps=parseFloat(e.qty)||0,sys=parseFloat(val)||0;const diff=val!==''?sys-ps:null;
-  const diffStr=diff===null?'—':(diff>0?'+':'')+diff;const diffCls=diff===null?'':diff>0?'pos':diff<0?'neg':'zero';
-  const dEl=document.getElementById('diff-'+id);if(dEl){dEl.textContent=diffStr;dEl.className=`sys-diff ${diffCls}`;}
+  const e=paEntries.find(x=>x.id===id);if(!e)return;
+  e.sys=(val||'').trim();
   updatePASummary();savePA();paSyncEntry(e);
+  renderReview(); // re-render so the value locks (editable again only via ✏ Edit)
 }
 function paSetManual(id,st) {
   const e=paEntries.find(x=>x.id===id);if(!e)return;e.status=st;renderReview();updatePASummary();savePA();paSyncEntry(e);
