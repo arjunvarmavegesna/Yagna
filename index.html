@@ -58,6 +58,11 @@ html,body{background:var(--bg);color:var(--text);font-family:'Space Grotesk',san
 .api-sheet input{background:var(--bg);border:1.5px solid var(--border);border-radius:9px;padding:0.65rem 0.75rem;font-family:'JetBrains Mono',monospace;font-size:0.85rem;color:var(--text);outline:none;width:100%}
 .api-sheet input:focus{border-color:var(--accent)}
 .api-sheet-save{background:var(--accent);color:#fff;border:none;border-radius:10px;padding:0.75rem;font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:0.9rem;cursor:pointer;width:100%}
+/* ── STOCK SESSION ── */
+#pa-join-modal{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:500;align-items:flex-end;justify-content:center}
+#pa-join-modal.open{display:flex}
+.pa-session-bar{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:0.5rem 0.7rem;display:flex;align-items:center}
+.pa-ss-btn{background:var(--accent-lt);color:var(--accent);border:1px solid var(--accent2);border-radius:8px;padding:0.32rem 0.62rem;font-size:0.68rem;font-weight:700;cursor:pointer;font-family:'Space Grotesk',sans-serif}
 
 /* ── SHARED COMPONENTS ── */
 .section-hdr{display:flex;justify-content:space-between;align-items:center;margin-bottom:0.1rem}
@@ -493,6 +498,22 @@ table.data-tbl tr:hover td{background:var(--bg)}
 
   <!-- PA CAPTURE -->
   <div id="pa-view-capture" class="page">
+    <div class="pa-session-bar" id="pa-session-bar">
+      <div id="pa-session-solo" style="display:flex;gap:0.4rem;align-items:center;flex-wrap:wrap;width:100%">
+        <span style="font-size:0.7rem;color:var(--muted);margin-right:auto">📴 Solo — saved on this device only</span>
+        <button class="pa-ss-btn" onclick="paOpenStart()">＋ Start shared</button>
+        <button class="pa-ss-btn" onclick="paOpenJoin()">🔗 Join</button>
+      </div>
+      <div id="pa-session-live" style="display:none;flex-direction:column;gap:0.3rem;width:100%">
+        <div style="display:flex;align-items:center;gap:0.5rem;width:100%">
+          <span class="fb-dot connecting" id="pa-fb-dot"></span>
+          <span style="font-size:0.74rem;font-weight:700">Live · <span id="pa-session-code"></span></span>
+          <span id="pa-session-status" style="font-size:0.62rem;color:var(--muted)"></span>
+          <button class="pa-ss-btn" onclick="paLeaveSession()" style="margin-left:auto">Leave</button>
+        </div>
+        <div id="pa-session-members" style="font-size:0.66rem;color:var(--muted);line-height:1.3"></div>
+      </div>
+    </div>
     <div class="camera-row">
       <button class="cam-btn cam-btn-camera" onclick="document.getElementById('pa-cam').click()">
         <span class="cb-icon">📷</span><span class="cb-label">Take Photo</span>
@@ -827,6 +848,19 @@ table.data-tbl tr:hover td{background:var(--bg)}
   </div>
 </div>
 
+<!-- STOCK SESSION JOIN MODAL -->
+<div id="pa-join-modal" onclick="if(event.target===this)this.classList.remove('open')">
+  <div class="api-sheet">
+    <div class="api-sheet-title" id="pa-join-title">🔗 Join Stock Session</div>
+    <input type="text" id="pa-member-name" placeholder="Your name" maxlength="40">
+    <div id="pa-join-code-wrap">
+      <input type="text" id="pa-join-code" placeholder="6-CHARACTER CODE" maxlength="6" style="text-transform:uppercase;letter-spacing:0.2em;text-align:center;width:100%">
+    </div>
+    <div style="font-size:0.72rem;color:var(--muted)" id="pa-join-hint">Get the code from whoever started the shared stock session. Everyone with the code sees the same list in real time.</div>
+    <button class="api-sheet-save" id="pa-join-btn" onclick="paSessionModalSubmit()">Join Session</button>
+  </div>
+</div>
+
 <!-- LIGHTBOX -->
 <div id="lightbox"><button id="lb-close" onclick="closeLB()">✕</button><img id="lb-img" src="" alt=""></div>
 
@@ -1013,6 +1047,159 @@ function loadPA() {
       }
     };
   } catch(e) { console.warn('loadPA failed:', e.message); }
+}
+// ══════════════════════════════════════════════════════
+//  STOCK LOADER — SHARED SESSION SYNC (multi-device, real-time)
+// ══════════════════════════════════════════════════════
+let paSession = null;          // { code } when in a shared session, else null (solo)
+let paDeviceTag = '';          // unique per device/session so entry keys never collide
+let paSyncRef = null;          // Firebase entries ref while listening
+let paApplyingRemote = false;  // guards against write/echo loops during reconcile
+let paMemberName = '';         // this device's display name in the session
+let paSessionMode = 'join';    // 'start' or 'join' — which action the modal performs
+let paMemberRef = null;        // this device's presence node
+let paMembersRef = null;       // members listener ref
+
+function paEntryKey(e){ return e.fbKey || (e.fbKey = paDeviceTag + '_' + e.id); }
+function paWhenFBReady(cb, tries){
+  tries = tries || 0;
+  if (atFBReady) return cb();
+  if (tries > 24) { toast('⚠ Cloud not ready — check connection'); paSetSessionStatus('disconnected','Offline'); return; }
+  setTimeout(() => paWhenFBReady(cb, tries + 1), 250);
+}
+function paSyncEntry(e){
+  if (!paSession || !atFBReady || paApplyingRemote) return;
+  const key = paEntryKey(e);
+  try {
+    const clean = JSON.parse(JSON.stringify(e)); // strip undefined / non-serialisable
+    atFBDB.ref('stock_sessions/' + paSession.code + '/entries/' + key).set(clean);
+  } catch(err){ console.warn('paSyncEntry failed:', err.message); }
+}
+function paSyncRemove(key){
+  if (!paSession || !atFBReady || !key) return;
+  atFBDB.ref('stock_sessions/' + paSession.code + '/entries/' + key).remove();
+}
+function paListen(){
+  if (!paSession || !atFBReady) return;
+  paSyncRef = atFBDB.ref('stock_sessions/' + paSession.code + '/entries');
+  paSyncRef.on('value', snap => paApplyRemote(snap.val() || {}));
+  atFBDB.ref('.info/connected').on('value', snap => {
+    if (paSession) paSetSessionStatus(snap.val() ? 'connected' : 'disconnected', snap.val() ? 'Live' : 'Reconnecting…');
+  });
+}
+function paApplyRemote(data){
+  paApplyingRemote = true;
+  const byKey = {}; paEntries.forEach(e => { if (e.fbKey) byKey[e.fbKey] = e; });
+  const next = [];
+  Object.keys(data).forEach(k => {
+    const r = data[k];
+    const existing = byKey[k];
+    const id = existing ? existing.id : paEid++;
+    next.push(Object.assign({}, r, { id: id, fbKey: k }));
+  });
+  next.sort((a,b) => (b.ts || b.id || 0) - (a.ts || a.id || 0));
+  paEntries = next;
+  paApplyingRemote = false;
+  savePA();
+  renderQueue(); updatePASummary();
+  if (typeof paCurrentTab !== 'undefined' && paCurrentTab === 'review') renderReview();
+  if (typeof updateHomeStats === 'function') updateHomeStats();
+}
+function paShowSessionLive(code){
+  document.getElementById('pa-session-solo').style.display = 'none';
+  document.getElementById('pa-session-live').style.display = 'flex';
+  document.getElementById('pa-session-code').textContent = code;
+}
+function paShowSessionSolo(){
+  document.getElementById('pa-session-live').style.display = 'none';
+  document.getElementById('pa-session-solo').style.display = 'flex';
+}
+function paSetSessionStatus(state, label){
+  const dot = document.getElementById('pa-fb-dot'); if (dot) dot.className = 'fb-dot ' + state;
+  const lbl = document.getElementById('pa-session-status'); if (lbl) lbl.textContent = label;
+}
+function paOpenStart(){
+  paSessionMode = 'start';
+  document.getElementById('pa-join-title').textContent = '＋ Start Shared Session';
+  document.getElementById('pa-join-code-wrap').style.display = 'none';
+  document.getElementById('pa-join-hint').textContent = 'Start a shared count. Others join with the code you get. Everyone sees the same list — and who else is in — live.';
+  document.getElementById('pa-join-btn').textContent = 'Start Session';
+  paOpenSessionModal();
+}
+function paOpenJoin(){
+  paSessionMode = 'join';
+  document.getElementById('pa-join-title').textContent = '🔗 Join Stock Session';
+  document.getElementById('pa-join-code-wrap').style.display = 'block';
+  document.getElementById('pa-join-hint').textContent = 'Get the code from whoever started the shared stock session. Everyone with the code sees the same list in real time.';
+  document.getElementById('pa-join-btn').textContent = 'Join Session';
+  paOpenSessionModal();
+}
+function paOpenSessionModal(){
+  document.getElementById('pa-join-modal').classList.add('open');
+  setTimeout(() => { const i = document.getElementById('pa-member-name'); if (i) { i.value = paMemberName; i.focus(); } }, 60);
+}
+function paSessionModalSubmit(){
+  const name = (document.getElementById('pa-member-name').value || '').trim();
+  if (!name) { toast('⚠ Enter your name'); return; }
+  paMemberName = name;
+  if (paSessionMode === 'start') {
+    document.getElementById('pa-join-modal').classList.remove('open');
+    paStartSession(name);
+  } else {
+    const code = (document.getElementById('pa-join-code').value || '').trim().toUpperCase();
+    if (code.length < 4) { toast('⚠ Enter the session code'); return; }
+    document.getElementById('pa-join-modal').classList.remove('open');
+    paJoinSession(name, code);
+  }
+}
+function paPushLocalEntries(){
+  paEntries.forEach(e => { if (!e.ts) e.ts = Date.now(); paSyncEntry(e); });
+}
+function paStartSession(name){
+  atInitFirebase();
+  paDeviceTag = Math.random().toString(36).slice(2, 6);
+  const code = atGenerateCode();
+  paSession = { code };
+  paShowSessionLive(code);
+  paSetSessionStatus('connecting', 'Connecting…');
+  paWhenFBReady(() => { paRegisterMember(); paListenMembers(); paPushLocalEntries(); paListen(); toast('✓ Shared session ' + code + ' started'); });
+}
+function paJoinSession(name, code){
+  atInitFirebase();
+  paDeviceTag = Math.random().toString(36).slice(2, 6);
+  paSession = { code };
+  paShowSessionLive(code);
+  paSetSessionStatus('connecting', 'Connecting…');
+  paWhenFBReady(() => { paRegisterMember(); paListenMembers(); paPushLocalEntries(); paListen(); toast('✓ Joined session ' + code); });
+}
+// ── Presence: who's in this session ──
+function paRegisterMember(){
+  if (!paSession || !atFBReady || !paMemberName) return;
+  paMemberRef = atFBDB.ref('stock_sessions/' + paSession.code + '/members/' + paDeviceTag);
+  paMemberRef.set({ name: paMemberName, joinedAt: Date.now(), lastSeen: Date.now() });
+  paMemberRef.onDisconnect().remove(); // auto-remove when the tab/connection closes
+}
+function paListenMembers(){
+  if (!paSession || !atFBReady) return;
+  paMembersRef = atFBDB.ref('stock_sessions/' + paSession.code + '/members');
+  paMembersRef.on('value', snap => paRenderMembers(snap.val() || {}));
+}
+function paRenderMembers(members){
+  const el = document.getElementById('pa-session-members');
+  if (!el) return;
+  const names = Object.values(members).map(m => m && m.name).filter(Boolean);
+  if (!names.length) { el.textContent = ''; return; }
+  const labelled = names.map(n => n === paMemberName ? n + ' (you)' : n);
+  el.textContent = '👥 ' + names.length + ' here: ' + labelled.join(', ');
+}
+function paLeaveSession(){
+  if (paMemberRef) { try { paMemberRef.onDisconnect().cancel(); } catch(e){} paMemberRef.remove(); paMemberRef = null; }
+  if (paMembersRef) { paMembersRef.off(); paMembersRef = null; }
+  if (paSyncRef) { paSyncRef.off(); paSyncRef = null; }
+  paSession = null;
+  paShowSessionSolo();
+  paSetSessionStatus('', '');
+  toast('Left shared session — back to solo (your list stays on this device)');
 }
 function isBrandComplete(b) {
   return !!(b.name && b.generic && b.ilo && b.group && b.category && b.packSize && b.marketedBy && b.mfr);
@@ -1554,7 +1741,7 @@ function expiryStatus(val) {
 function paSubmit() {
   const brand=document.getElementById('pa-brand').value.trim();
   if(!brand){toast('⚠ Brand name required');document.getElementById('pa-brand').focus();return;}
-  paEntries.unshift({id:paEid++,brand,molecule:document.getElementById('pa-mol').value.trim(),category:document.getElementById('pa-cat').value,packSize:document.getElementById('pa-pack').value.trim(),batch:document.getElementById('pa-batch').value.trim(),expiry:document.getElementById('pa-expiry').value.trim(),mrp:document.getElementById('pa-mrp').value,qty:document.getElementById('pa-qty').value,sys:'',schedule:document.getElementById('pa-sch').value,marketedBy:document.getElementById('pa-mkt').value.trim(),mfr:document.getElementById('pa-mfr').value.trim(),auditor:document.getElementById('pa-auditor').value.trim(),photos:paPhotos.map(p=>p.src),status:'pending',remark:'',edited:false,time:new Date().toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'})});
+  paEntries.unshift({id:paEid++,brand,molecule:document.getElementById('pa-mol').value.trim(),category:document.getElementById('pa-cat').value,packSize:document.getElementById('pa-pack').value.trim(),batch:document.getElementById('pa-batch').value.trim(),expiry:document.getElementById('pa-expiry').value.trim(),mrp:document.getElementById('pa-mrp').value,qty:document.getElementById('pa-qty').value,sys:'',schedule:document.getElementById('pa-sch').value,marketedBy:document.getElementById('pa-mkt').value.trim(),mfr:document.getElementById('pa-mfr').value.trim(),auditor:document.getElementById('pa-auditor').value.trim(),photos:paPhotos.map(p=>p.src),ts:Date.now(),status:'pending',remark:'',edited:false,time:new Date().toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'})});
   // ── Auto-save to Brand Master ──
   const existing = lookupBrand(brand);
   const bmRecord = {
@@ -1579,7 +1766,7 @@ function paSubmit() {
     saveBrandToDB(bmRecord);
   }
   paClearForm();paPhotos=[];renderPAStrip();document.getElementById('pa-ai-btn').style.display='none';setPABar('');
-  savePA();renderQueue();updatePASummary();toast(`✅ ${brand} added → saved to Brand Master`);window.scrollTo({top:0,behavior:'smooth'});
+  savePA();paSyncEntry(paEntries[0]);renderQueue();updatePASummary();toast(`✅ ${brand} added → saved to Brand Master`);window.scrollTo({top:0,behavior:'smooth'});
 }
 function paClearForm() {
   ['pa-brand','pa-mol','pa-pack','pa-batch','pa-expiry','pa-mrp','pa-qty','pa-mkt','pa-mfr','pa-auditor'].forEach(id=>{const el=document.getElementById(id);el.value='';el.classList.remove('ai-ok','exp-warn','exp-danger');});
@@ -1664,10 +1851,10 @@ function setSys(id,val) {
   const ps=parseFloat(e.qty)||0,sys=parseFloat(val)||0;const diff=val!==''?sys-ps:null;
   const diffStr=diff===null?'—':(diff>0?'+':'')+diff;const diffCls=diff===null?'':diff>0?'pos':diff<0?'neg':'zero';
   const dEl=document.getElementById('diff-'+id);if(dEl){dEl.textContent=diffStr;dEl.className=`sys-diff ${diffCls}`;}
-  updatePASummary();savePA();
+  updatePASummary();savePA();paSyncEntry(e);
 }
 function paSetManual(id,st) {
-  const e=paEntries.find(x=>x.id===id);if(!e)return;e.status=st;renderReview();updatePASummary();savePA();
+  const e=paEntries.find(x=>x.id===id);if(!e)return;e.status=st;renderReview();updatePASummary();savePA();paSyncEntry(e);
   toast(st==='expired'?`⚠ Expired: ${e.brand}`:`👻 Physical Only: ${e.brand}`);
 }
 function updatePASummary() {
@@ -1701,11 +1888,12 @@ function savePaEdit() {
   e.schedule=document.getElementById('pe-sch').value;e.marketedBy=document.getElementById('pe-mkt').value.trim();
   e.mfr=document.getElementById('pe-mfr').value.trim();e.remark=document.getElementById('pe-remark').value.trim();
   e.status='pending';e.edited=true;
-  savePA();closePaEdit();renderReview();updatePASummary();renderQueue();toast(`✓ ${e.brand} updated`);
+  savePA();paSyncEntry(e);closePaEdit();renderReview();updatePASummary();renderQueue();toast(`✓ ${e.brand} updated`);
 }
 function confirmPaDelete(id) {
   paDeletingId=id||paEditingId;const e=paEntries.find(x=>x.id===paDeletingId);
   showConfirm('Delete entry?',`"${e?e.brand:'this entry'}" will be removed.`,()=>{
+    const _del=paEntries.find(x=>x.id===paDeletingId); if(_del&&_del.fbKey)paSyncRemove(_del.fbKey);
     paEntries=paEntries.filter(x=>x.id!==paDeletingId);paDeletingId=null;
     savePA();closePaEdit();renderReview();updatePASummary();renderQueue();toast('Entry removed');
   });
