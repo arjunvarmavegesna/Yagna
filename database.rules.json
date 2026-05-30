@@ -1,0 +1,20 @@
+{
+  "rules": {
+    // Lock everything by default.
+    ".read": false,
+    ".write": false,
+
+    "audit_sessions": {
+      // Collection root is NOT readable — this blocks enumerating/scraping all session codes.
+      ".read": false,
+      ".write": false,
+
+      "$code": {
+        // A session is only reachable if you already know its code AND are signed in (anonymous auth).
+        ".read": "auth != null",
+        ".write": "auth != null",
+        ".validate": "$code.length >= 4 && $code.length <= 12"
+      }
+    }
+  }
+}

@@ -1,0 +1,2318 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>Yagna Med Solutions — Opening Stock Loader</title>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+:root{
+  --bg:#f4f2ee;--surface:#fff;--border:#e0dbd2;
+  --accent:#1a472a;--accent-lt:#eaf2ec;--accent2:#2d6a4f;
+  --amber:#c97b10;--amber-lt:#fff7ed;--amber-border:#fcd9a0;
+  --red:#c0392b;--red-lt:#fef2f2;--red-border:#fca5a5;
+  --ok:#1a6b3a;--ok-lt:#f0fbf4;--ok-border:#a8d4b0;
+  --blue:#1d4ed8;--blue-lt:#eff6ff;--blue-border:#bfdbfe;
+  --text:#1b1917;--muted:#8a8278;
+}
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{background:var(--bg);color:var(--text);font-family:'Space Grotesk',sans-serif;min-height:100vh}
+
+/* ── TOP HEADER ── */
+.app-hdr{height:52px;background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:space-between;padding:0 1rem;position:sticky;top:0;z-index:300;box-shadow:0 2px 10px rgba(0,0,0,0.2)}
+.app-brand{font-size:1rem;font-weight:700;display:flex;align-items:center;gap:0.4rem}
+.api-key-btn{background:rgba(255,255,255,0.15);border:none;color:#fff;border-radius:7px;padding:0.3rem 0.7rem;font-size:0.72rem;font-weight:600;cursor:pointer;font-family:'Space Grotesk',sans-serif}
+
+/* ── BOTTOM NAV ── */
+.bottom-nav{position:fixed;bottom:0;left:0;right:0;background:var(--surface);border-top:1px solid var(--border);display:flex;z-index:300;height:58px}
+.nav-btn{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:0.15rem;border:none;background:transparent;cursor:pointer;font-family:'Space Grotesk',sans-serif;transition:all 0.15s;padding:0.3rem 0;position:relative}
+.nav-btn.active{color:var(--accent)}
+.nav-btn:not(.active){color:var(--muted)}
+.nav-icon{font-size:1.25rem;line-height:1}
+.nav-label{font-size:0.58rem;font-weight:700;text-transform:uppercase;letter-spacing:0.5px}
+.nav-badge{position:absolute;top:4px;right:calc(50% - 18px);background:var(--accent);color:#fff;border-radius:10px;padding:0 4px;font-size:0.55rem;font-weight:700;min-width:14px;text-align:center}
+.nav-btn.active::after{content:'';position:absolute;bottom:0;left:20%;right:20%;height:2px;background:var(--accent);border-radius:2px 2px 0 0}
+
+/* ── VIEWS ── */
+.view{display:none;padding-bottom:70px}.view.active{display:block}
+.page{padding:1rem;display:flex;flex-direction:column;gap:0.9rem;max-width:600px;margin:0 auto}
+
+/* ── API KEY MODAL ── */
+#api-modal{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:500;align-items:flex-end;justify-content:center}
+#api-modal.open{display:flex}
+.api-sheet{background:var(--surface);border-radius:20px 20px 0 0;width:100%;max-width:520px;padding:1.25rem 1rem 2rem;display:flex;flex-direction:column;gap:0.75rem}
+.api-sheet-title{font-size:0.75rem;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:var(--muted)}
+.api-sheet input{background:var(--bg);border:1.5px solid var(--border);border-radius:9px;padding:0.65rem 0.75rem;font-family:'JetBrains Mono',monospace;font-size:0.85rem;color:var(--text);outline:none;width:100%}
+.api-sheet input:focus{border-color:var(--accent)}
+.api-sheet-save{background:var(--accent);color:#fff;border:none;border-radius:10px;padding:0.75rem;font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:0.9rem;cursor:pointer;width:100%}
+
+/* ── SHARED COMPONENTS ── */
+.section-hdr{display:flex;justify-content:space-between;align-items:center;margin-bottom:0.1rem}
+.section-title{font-size:0.65rem;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:var(--muted)}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:1rem}
+.pill{display:inline-flex;align-items:center;padding:0.18rem 0.5rem;border-radius:20px;font-size:0.6rem;font-weight:700;text-transform:uppercase;white-space:nowrap}
+.pill-ok{background:var(--ok-lt);color:var(--ok);border:1px solid var(--ok-border)}
+.pill-warn{background:var(--amber-lt);color:var(--amber);border:1px solid var(--amber-border)}
+.pill-err{background:var(--red-lt);color:var(--red);border:1px solid var(--red-border)}
+.pill-blue{background:var(--blue-lt);color:var(--blue);border:1px solid var(--blue-border)}
+.pill-muted{background:#f3f4f6;color:#6b7280;border:1px solid #e5e7eb}
+.btn-primary{background:var(--accent);color:#fff;border:none;border-radius:10px;padding:0.75rem 1rem;font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:0.9rem;cursor:pointer;width:100%;display:flex;align-items:center;justify-content:center;gap:0.4rem;min-height:48px}
+.btn-primary:active{background:#163b22;transform:scale(0.98)}
+.btn-primary:disabled{opacity:0.4;cursor:not-allowed}
+.btn-secondary{background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:10px;padding:0.7rem 1rem;font-family:'Space Grotesk',sans-serif;font-weight:600;font-size:0.88rem;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:0.4rem}
+.btn-amber{background:var(--amber);color:#fff;border:none;border-radius:10px;padding:0.75rem 1rem;font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:0.9rem;cursor:pointer;width:100%;display:flex;align-items:center;justify-content:center;gap:0.4rem}
+.btn-amber:disabled{opacity:0.35;cursor:not-allowed}
+.form-grid{display:grid;grid-template-columns:1fr 1fr;gap:0.5rem}
+.field{display:flex;flex-direction:column;gap:0.22rem}
+.field.full{grid-column:1/-1}
+.field label{font-size:0.62rem;font-weight:700;text-transform:uppercase;letter-spacing:0.8px;color:var(--muted)}
+.field input,.field select,.field textarea{background:var(--bg);border:1.5px solid var(--border);border-radius:8px;padding:0.55rem 0.65rem;font-family:'Space Grotesk',sans-serif;font-size:0.88rem;color:var(--text);outline:none;transition:border-color 0.2s;width:100%;-webkit-appearance:none;appearance:none}
+.field input:focus,.field select:focus,.field textarea:focus{border-color:var(--accent)}
+.field input.ai-ok{border-color:#52b97a;background:var(--ok-lt)}
+.field input::placeholder,.field textarea::placeholder{color:#c0bab4}
+.field select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%238a8278' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 0.7rem center;padding-right:2rem}
+.field-section{font-size:0.6rem;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:var(--accent2);padding:0.25rem 0;border-top:1px solid var(--border);grid-column:1/-1;margin-top:0.2rem}
+.spinner{width:14px;height:14px;border:2px solid currentColor;border-top-color:transparent;border-radius:50%;animation:spin 0.7s linear infinite;flex-shrink:0}
+@keyframes spin{to{transform:rotate(360deg)}}
+.ai-bar{display:none;align-items:center;gap:0.5rem;padding:0.6rem 0.75rem;border-radius:9px;font-family:'JetBrains Mono',monospace;font-size:0.74rem}
+.ai-bar.loading{background:var(--amber-lt);border:1px solid var(--amber-border);color:var(--amber);display:flex}
+.ai-bar.success{background:var(--ok-lt);border:1px solid var(--ok-border);color:var(--ok);display:flex}
+.ai-bar.error{background:var(--red-lt);border:1px solid var(--red-border);color:var(--red);display:flex}
+.empty{text-align:center;padding:2.5rem 1rem;color:var(--muted)}
+.empty .ei{font-size:2.2rem;opacity:0.3;display:block;margin-bottom:0.5rem}
+.empty p{font-size:0.82rem;line-height:1.6}
+.tbl-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch}
+table.data-tbl{width:100%;border-collapse:collapse;font-size:0.76rem;min-width:600px}
+table.data-tbl th{background:var(--accent-lt);color:var(--accent);font-weight:700;padding:0.45rem 0.65rem;text-align:left;font-size:0.6rem;text-transform:uppercase;letter-spacing:0.5px;white-space:nowrap;position:sticky;top:0}
+table.data-tbl td{padding:0.45rem 0.65rem;border-top:1px solid var(--border);vertical-align:top}
+table.data-tbl tr:hover td{background:var(--bg)}
+.progress-bar-wrap{background:var(--border);border-radius:4px;height:6px;overflow:hidden}
+.progress-bar-fill{height:100%;background:linear-gradient(90deg,var(--accent),#52b97a);border-radius:4px;transition:width 0.3s}
+.stats-row{display:grid;grid-template-columns:repeat(4,1fr);gap:0.4rem}
+.stat-card{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:0.5rem 0.3rem;text-align:center}
+.stat-val{font-size:1.2rem;font-weight:700;font-family:'JetBrains Mono',monospace;line-height:1;margin-bottom:0.1rem}
+.stat-lbl{font-size:0.55rem;color:var(--muted);text-transform:uppercase;letter-spacing:0.4px}
+#toast{position:fixed;bottom:70px;left:50%;transform:translateX(-50%) translateY(60px);background:var(--text);color:#fff;border-radius:9px;padding:0.5rem 1rem;font-size:0.82rem;font-weight:500;z-index:999;transition:transform 0.3s ease;white-space:nowrap;pointer-events:none;max-width:90vw;text-align:center}
+#toast.show{transform:translateX(-50%) translateY(0)}
+
+/* ── BOTTOM SHEET MODAL ── */
+.modal-bg{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.55);z-index:400;align-items:flex-end;justify-content:center}
+.modal-bg.open{display:flex}
+.bottom-sheet{background:var(--surface);border-radius:20px 20px 0 0;width:100%;max-width:560px;max-height:88vh;overflow-y:auto;padding:1.25rem 1rem 2rem;display:flex;flex-direction:column;gap:0.7rem;animation:slideUp 0.22s ease}
+@keyframes slideUp{from{transform:translateY(30px);opacity:0}to{transform:translateY(0);opacity:1}}
+.sheet-title{font-size:0.75rem;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:var(--muted);display:flex;justify-content:space-between;align-items:center}
+.sheet-close{background:var(--bg);border:1px solid var(--border);color:var(--muted);border-radius:50%;width:28px;height:28px;font-size:0.85rem;cursor:pointer;display:flex;align-items:center;justify-content:center}
+.sheet-actions{display:grid;grid-template-columns:1fr 1fr;gap:0.5rem;margin-top:0.3rem}
+.btn-danger{background:var(--red-lt);color:var(--red);border:1px solid var(--red-border);border-radius:10px;padding:0.7rem;font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:0.88rem;cursor:pointer}
+
+/* ── CONFIRM MODAL ── */
+.confirm-modal{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:600;align-items:center;justify-content:center;padding:1rem}
+.confirm-modal.open{display:flex}
+.confirm-box{background:var(--surface);border-radius:16px;padding:1.5rem;max-width:300px;width:100%;text-align:center;display:flex;flex-direction:column;gap:1rem}
+.confirm-title{font-weight:700;font-size:0.95rem}
+.confirm-sub{font-size:0.8rem;color:var(--muted);line-height:1.5}
+.confirm-btns{display:grid;grid-template-columns:1fr 1fr;gap:0.5rem}
+.confirm-cancel{background:var(--bg);border:1px solid var(--border);border-radius:9px;padding:0.6rem;font-family:'Space Grotesk',sans-serif;font-weight:600;font-size:0.85rem;cursor:pointer}
+.confirm-ok{background:var(--red);color:#fff;border:none;border-radius:9px;padding:0.6rem;font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:0.85rem;cursor:pointer}
+
+/* ════════════════════════════════
+   BRAND MASTER
+════════════════════════════════ */
+.bm-record{background:var(--surface);border:1px solid var(--border);border-radius:11px;padding:0.8rem;display:flex;flex-direction:column;gap:0.4rem;margin-bottom:0.5rem;cursor:pointer;transition:border-color 0.15s}
+.bm-record:hover{border-color:var(--accent2)}
+.bm-record-top{display:flex;justify-content:space-between;align-items:flex-start;gap:0.5rem}
+.bm-name{font-weight:700;font-size:0.9rem}
+.bm-generic{font-size:0.73rem;color:var(--muted);font-style:italic;margin-top:0.1rem}
+.bm-meta{display:flex;gap:0.4rem;flex-wrap:wrap;margin-top:0.3rem}
+.bm-tag{font-size:0.62rem;background:var(--bg);border:1px solid var(--border);border-radius:5px;padding:0.1rem 0.4rem;color:var(--muted)}
+.bm-tag.complete{background:var(--ok-lt);color:var(--ok);border-color:var(--ok-border)}
+.filter-chips{display:flex;gap:0.4rem;flex-wrap:wrap}
+.chip{background:var(--surface);border:1px solid var(--border);border-radius:20px;padding:0.28rem 0.7rem;font-size:0.72rem;font-weight:600;cursor:pointer;font-family:'Space Grotesk',sans-serif;transition:all 0.15s}
+.chip.active{background:var(--accent);color:#fff;border-color:var(--accent)}
+.search-bar{background:var(--surface);border:1px solid var(--border);border-radius:9px;padding:0.5rem 0.75rem;font-family:'Space Grotesk',sans-serif;font-size:0.88rem;color:var(--text);outline:none;width:100%}
+.search-bar:focus{border-color:var(--accent)}
+.import-zone{border:2px dashed var(--border);border-radius:12px;padding:1.5rem;text-align:center;cursor:pointer;transition:all 0.2s;background:var(--bg)}
+.import-zone:hover,.import-zone.drag{border-color:var(--accent);background:var(--accent-lt)}
+.import-zone .iz-icon{font-size:2rem;margin-bottom:0.4rem;opacity:0.5}
+.import-zone .iz-label{font-size:0.82rem;color:var(--muted)}
+.import-zone .iz-sub{font-size:0.7rem;color:var(--muted);margin-top:0.2rem}
+
+/* ════════════════════════════════
+   DRUG ENRICHMENT
+════════════════════════════════ */
+.de-input-area{background:var(--bg);border:1.5px solid var(--border);border-radius:10px;padding:0.65rem;font-family:'Space Grotesk',sans-serif;font-size:0.88rem;color:var(--text);outline:none;width:100%;min-height:140px;resize:vertical;transition:border-color 0.2s;line-height:1.6}
+.de-input-area:focus{border-color:var(--accent)}
+.de-result-row{display:flex;align-items:center;gap:0.5rem;padding:0.55rem 0.65rem;border-radius:8px;border:1px solid var(--border);background:var(--surface);margin-bottom:0.3rem;cursor:pointer}
+.de-result-row:hover{border-color:var(--accent2)}
+.de-brand{font-weight:700;font-size:0.82rem;flex:1;min-width:0}
+.de-generic{font-size:0.7rem;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:2;min-width:0}
+.source-badge{font-size:0.58rem;font-weight:700;padding:0.1rem 0.4rem;border-radius:5px;flex-shrink:0;white-space:nowrap}
+.sb-bm{background:var(--ok-lt);color:var(--ok)}
+.sb-ai{background:var(--blue-lt);color:var(--blue)}
+.sb-pending{background:#f3f4f6;color:var(--muted)}
+
+/* ════════════════════════════════
+   MOLECULE MAPPER
+════════════════════════════════ */
+.mm-group{background:var(--surface);border:1px solid var(--border);border-radius:11px;margin-bottom:0.5rem;overflow:hidden}
+.mm-group-hdr{display:flex;justify-content:space-between;align-items:center;padding:0.8rem 0.9rem;cursor:pointer;gap:0.5rem}
+.mm-group-hdr:hover{background:var(--bg)}
+.mm-molecule{font-weight:700;font-size:0.85rem;flex:1}
+.mm-count-badge{background:var(--accent);color:#fff;border-radius:10px;padding:0.1rem 0.5rem;font-size:0.65rem;font-weight:700;flex-shrink:0}
+.mm-form-chip{font-size:0.62rem;background:var(--bg);border:1px solid var(--border);border-radius:5px;padding:0.1rem 0.4rem;color:var(--muted);flex-shrink:0}
+.mm-chevron{color:var(--muted);font-size:0.75rem;flex-shrink:0;transition:transform 0.2s}
+.mm-group.open .mm-chevron{transform:rotate(180deg)}
+.mm-brands{display:none;padding:0 0.9rem 0.8rem;display:flex;flex-direction:column;gap:0.3rem}
+.mm-group:not(.open) .mm-brands{display:none}
+.mm-brand-row{display:flex;justify-content:space-between;align-items:center;padding:0.4rem 0.6rem;background:var(--bg);border-radius:7px;font-size:0.78rem}
+.mm-brand-name{font-weight:600}
+.mm-brand-sup{color:var(--muted);font-size:0.7rem}
+
+/* ════════════════════════════════
+   PHARMAUDIT
+════════════════════════════════ */
+.camera-row{display:grid;grid-template-columns:1fr 1fr;gap:0.6rem}
+.cam-btn{border:none;border-radius:12px;padding:0.9rem 0.5rem;font-family:'Space Grotesk',sans-serif;font-weight:700;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:0.35rem;min-height:76px;transition:all 0.15s}
+.cam-btn-camera{background:var(--accent);color:#fff}.cam-btn-camera:active{background:#163b22}
+.cam-btn-gallery{background:var(--surface);color:var(--text);border:2px solid var(--border)}
+.cam-btn .cb-icon{font-size:1.6rem}.cam-btn .cb-label{font-size:0.73rem;font-weight:600}
+.photo-strip-wrap{display:none;flex-direction:column;gap:0.4rem}
+.photo-strip{display:flex;gap:0.5rem;overflow-x:auto;padding-bottom:0.25rem;scrollbar-width:none}
+.photo-strip::-webkit-scrollbar{display:none}
+.photo-thumb{position:relative;flex-shrink:0;width:84px;height:84px;border-radius:10px;overflow:hidden;border:2px solid var(--border);cursor:pointer}
+.photo-thumb img{width:100%;height:100%;object-fit:cover}
+.photo-thumb-del{position:absolute;top:3px;right:3px;background:rgba(0,0,0,0.65);color:#fff;border:none;border-radius:50%;width:20px;height:20px;font-size:0.6rem;cursor:pointer;display:flex;align-items:center;justify-content:center}
+.photo-add-tile{flex-shrink:0;width:84px;height:84px;border-radius:10px;border:2px dashed var(--border);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:0.15rem;cursor:pointer;color:var(--muted);font-size:0.65rem;font-weight:600;background:var(--bg)}
+.photo-add-tile span{font-size:1.3rem}
+.pa-sum-row{display:grid;grid-template-columns:repeat(5,1fr);gap:0.35rem}
+.pa-sum-card{background:var(--surface);border:1px solid var(--border);border-radius:9px;padding:0.45rem 0.2rem;text-align:center}
+.pa-sv{font-size:1.15rem;font-weight:700;font-family:'JetBrains Mono',monospace;line-height:1;margin-bottom:0.1rem}
+.pa-sl{font-size:0.52rem;color:var(--muted);text-transform:uppercase;letter-spacing:0.3px;line-height:1.3}
+.sv-all{color:var(--text)}.sv-eq{color:var(--ok)}.sv-hi{color:var(--amber)}.sv-lo{color:var(--blue)}.sv-exp{color:var(--red)}
+.entry-card{background:var(--surface);border:1px solid var(--border);border-left:4px solid var(--border);border-radius:12px;padding:0.85rem;margin-bottom:0.55rem;animation:fadeIn 0.2s ease}
+@keyframes fadeIn{from{opacity:0;transform:translateY(5px)}to{opacity:1;transform:none}}
+.entry-card.st-eq{border-left-color:var(--ok)}.entry-card.st-sys-hi{border-left-color:var(--amber)}
+.entry-card.st-sys-lo{border-left-color:var(--blue)}.entry-card.st-expired{border-left-color:var(--red)}
+.entry-card.st-ghost{border-left-color:var(--muted)}.entry-card.st-pending{border-left-color:#d1d5db}
+.ec-top{display:flex;justify-content:space-between;align-items:flex-start;gap:0.5rem;margin-bottom:0.5rem}
+.ec-name{font-weight:700;font-size:0.9rem;line-height:1.2}
+.ec-mol{font-size:0.7rem;color:var(--muted);font-style:italic;margin-top:0.08rem}
+.ec-grid{display:grid;grid-template-columns:1fr 1fr;gap:0.28rem 0.7rem;margin-bottom:0.55rem}
+.ec-field{display:flex;flex-direction:column;gap:0.04rem}
+.ec-lbl{font-size:0.57rem;font-weight:600;text-transform:uppercase;letter-spacing:0.6px;color:var(--muted)}
+.ec-val{font-size:0.78rem;font-family:'JetBrains Mono',monospace;font-weight:500}
+.ec-val.st-text{font-family:'Space Grotesk',sans-serif;font-size:0.76rem}
+.ec-val.exp-warn{color:var(--amber)}.ec-val.exp-danger{color:var(--red)}.ec-val.exp-ok{color:var(--ok)}
+.ec-photos{display:flex;gap:0.35rem;margin-bottom:0.55rem;overflow-x:auto}
+.ec-photo{width:56px;height:56px;border-radius:7px;object-fit:cover;border:1px solid var(--border);flex-shrink:0;cursor:pointer}
+.sys-row{display:flex;gap:0.5rem;align-items:center;background:var(--bg);border:1px solid var(--border);border-radius:9px;padding:0.5rem 0.65rem;margin-bottom:0.55rem}
+.sys-lbl{font-size:0.62rem;font-weight:700;text-transform:uppercase;letter-spacing:0.8px;color:var(--muted);flex-shrink:0}
+.sys-ps{font-family:'JetBrains Mono',monospace;font-size:0.95rem;font-weight:700;min-width:36px;text-align:center;flex-shrink:0}
+.sys-sep{color:var(--muted);font-size:0.75rem;flex-shrink:0}
+.sys-input{flex:1;border:1.5px solid var(--border);border-radius:7px;padding:0.38rem 0.55rem;font-family:'JetBrains Mono',monospace;font-size:0.92rem;font-weight:700;color:var(--text);background:var(--surface);outline:none;text-align:center;min-width:0}
+.sys-input:focus{border-color:var(--accent)}
+.sys-diff{font-family:'JetBrains Mono',monospace;font-size:0.8rem;font-weight:700;flex-shrink:0;min-width:46px;text-align:right}
+.sys-diff.pos{color:var(--amber)}.sys-diff.neg{color:var(--blue)}.sys-diff.zero{color:var(--ok)}
+.ec-actions{display:grid;grid-template-columns:1fr 1fr 1fr 40px;gap:0.35rem}
+.ec-btn{border:none;border-radius:8px;padding:0.48rem 0.25rem;font-size:0.72rem;font-weight:700;cursor:pointer;font-family:'Space Grotesk',sans-serif;display:flex;align-items:center;justify-content:center;gap:0.2rem}
+.ec-btn:active{transform:scale(0.95)}
+.eb-expired{background:var(--red-lt);color:var(--red)}.eb-ghost{background:var(--blue-lt);color:var(--blue)}
+.eb-edit{background:var(--accent-lt);color:var(--accent)}.eb-del{background:var(--bg);color:var(--muted);border:1px solid var(--border)}
+.edited-badge{font-size:0.56rem;background:#f0f9ff;color:#0369a1;border:1px solid #bae6fd;border-radius:10px;padding:0.08rem 0.35rem;font-weight:700;margin-left:0.3rem;vertical-align:middle}
+.pa-report-sheet{background:var(--surface);border:1px solid var(--border);border-radius:12px;overflow:hidden;margin-bottom:0.7rem}
+.pa-sheet-hdr{display:flex;justify-content:space-between;align-items:center;padding:0.65rem 0.9rem}
+.pa-sheet-title{font-weight:700;font-size:0.82rem;color:#fff}
+.pa-sheet-count{font-size:0.68rem;background:rgba(255,255,255,0.2);border-radius:10px;padding:0.08rem 0.5rem;font-weight:700;color:#fff}
+.pa-tbl-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch}
+.pa-tbl{width:100%;border-collapse:collapse;font-size:0.72rem;min-width:700px}
+.pa-tbl th{background:var(--accent-lt);color:var(--accent);font-weight:700;padding:0.4rem 0.55rem;text-align:left;font-size:0.58rem;text-transform:uppercase;letter-spacing:0.4px;white-space:nowrap}
+.pa-tbl td{padding:0.4rem 0.55rem;border-top:1px solid var(--border)}
+.pa-tbl tr:hover td{background:var(--bg)}
+.pa-sub-tabs{display:flex;gap:0.35rem;border-bottom:1px solid var(--border);margin-bottom:0.75rem;padding:0 0 0.5rem}
+.pa-sub-tab{background:none;border:none;font-family:'Space Grotesk',sans-serif;font-weight:600;font-size:0.78rem;color:var(--muted);cursor:pointer;padding:0.3rem 0.6rem;border-radius:7px;transition:all 0.15s}
+.pa-sub-tab.active{background:var(--accent);color:#fff}
+
+/* lightbox */
+#lightbox{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.92);z-index:700;align-items:center;justify-content:center;padding:1rem}
+#lightbox.open{display:flex}
+#lightbox img{max-width:100%;max-height:90vh;border-radius:8px;object-fit:contain}
+#lb-close{position:absolute;top:1rem;right:1rem;background:rgba(255,255,255,0.15);color:#fff;border:none;border-radius:50%;width:36px;height:36px;font-size:1.1rem;cursor:pointer;display:flex;align-items:center;justify-content:center}
+
+/* ════════════════════════════════
+   AUDIT TOOL
+════════════════════════════════ */
+.at-role-screen{display:flex;flex-direction:column;gap:1rem;align-items:center;justify-content:center;min-height:60vh;padding:1rem}
+.at-role-title{font-weight:700;font-size:1.1rem;color:var(--accent);text-align:center}
+.at-role-sub{font-size:0.78rem;color:var(--muted);text-align:center;line-height:1.6}
+.at-role-btns{display:grid;grid-template-columns:1fr 1fr;gap:0.7rem;width:100%;max-width:340px}
+.at-role-btn{border:none;border-radius:14px;padding:1.2rem 0.5rem;font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:0.88rem;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:0.4rem;transition:all 0.15s}
+.at-role-btn .rb-icon{font-size:1.8rem}
+.at-role-btn.reviewer{background:var(--accent);color:#fff}
+.at-role-btn.auditor{background:var(--surface);color:var(--text);border:2px solid var(--border)}
+.at-sub-tabs{display:flex;gap:0.35rem;border-bottom:1px solid var(--border);margin-bottom:0.75rem;padding:0 0 0.5rem;overflow-x:auto;scrollbar-width:none}
+.at-sub-tabs::-webkit-scrollbar{display:none}
+.at-sub-tab{background:none;border:none;font-family:'Space Grotesk',sans-serif;font-weight:600;font-size:0.76rem;color:var(--muted);cursor:pointer;padding:0.28rem 0.6rem;border-radius:7px;transition:all 0.15s;white-space:nowrap;flex-shrink:0}
+.at-sub-tab.active{background:var(--accent);color:#fff}
+.session-code-box{background:var(--accent);color:#fff;border-radius:14px;padding:1rem;text-align:center}
+.session-code{font-size:2.4rem;font-weight:700;font-family:'JetBrains Mono',monospace;letter-spacing:6px;line-height:1}
+.session-code-label{font-size:0.65rem;letter-spacing:2px;text-transform:uppercase;opacity:0.7;margin-bottom:0.3rem}
+.session-code-sub{font-size:0.72rem;opacity:0.75;margin-top:0.4rem}
+.at-live-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:0.4rem}
+.at-live-card{background:var(--surface);border:1px solid var(--border);border-radius:9px;padding:0.45rem 0.25rem;text-align:center}
+.at-lv{font-size:1.1rem;font-weight:700;font-family:'JetBrains Mono',monospace;line-height:1;margin-bottom:0.08rem}
+.at-ll{font-size:0.52rem;color:var(--muted);text-transform:uppercase;letter-spacing:0.3px}
+.auditor-row{display:flex;justify-content:space-between;align-items:center;padding:0.55rem 0.7rem;background:var(--bg);border:1px solid var(--border);border-radius:8px;margin-bottom:0.3rem}
+.auditor-name{font-weight:600;font-size:0.82rem}
+.auditor-meta{font-size:0.68rem;color:var(--muted);margin-top:0.08rem}
+.auditor-count{font-family:'JetBrains Mono',monospace;font-size:0.82rem;font-weight:700;color:var(--accent)}
+.at-item-row{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:0.7rem 0.8rem;margin-bottom:0.4rem}
+.at-item-top{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:0.45rem;gap:0.4rem}
+.at-item-brand{font-weight:700;font-size:0.88rem}
+.at-item-batch{font-size:0.7rem;color:var(--muted);font-family:'JetBrains Mono',monospace;margin-top:0.06rem}
+.at-item-row.counted{border-left:3px solid var(--ok);opacity:0.7}
+.at-item-row.discrepancy{border-left:3px solid var(--amber)}
+.at-item-row.expired-flag{border-left:3px solid var(--red)}
+.at-count-row{display:flex;gap:0.5rem;align-items:center;margin-top:0.4rem}
+.at-sys-val{background:var(--bg);border:1px solid var(--border);border-radius:7px;padding:0.35rem 0.55rem;font-family:'JetBrains Mono',monospace;font-size:0.88rem;font-weight:700;min-width:52px;text-align:center;flex-shrink:0}
+.at-ps-input{flex:1;border:1.5px solid var(--accent);border-radius:7px;padding:0.35rem 0.55rem;font-family:'JetBrains Mono',monospace;font-size:0.92rem;font-weight:700;color:var(--text);background:var(--surface);outline:none;text-align:center}
+.at-submit-btn{background:var(--accent);color:#fff;border:none;border-radius:7px;padding:0.35rem 0.75rem;font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:0.78rem;cursor:pointer;flex-shrink:0}
+.at-submit-btn:disabled{opacity:0.4;cursor:not-allowed}
+.at-variance{font-family:'JetBrains Mono',monospace;font-size:0.8rem;font-weight:700;min-width:40px;text-align:right;flex-shrink:0}
+.at-variance.pos{color:var(--amber)}.at-variance.neg{color:var(--blue)}.at-variance.zero{color:var(--ok)}
+.at-search-wrap{position:relative}
+.at-search{width:100%;background:var(--surface);border:1.5px solid var(--border);border-radius:10px;padding:0.6rem 0.75rem;font-family:'Space Grotesk',sans-serif;font-size:0.92rem;color:var(--text);outline:none}
+.at-search:focus{border-color:var(--accent)}
+.at-search-results{position:absolute;top:100%;left:0;right:0;background:var(--surface);border:1px solid var(--border);border-radius:10px;box-shadow:0 4px 16px rgba(0,0,0,0.12);z-index:100;max-height:220px;overflow-y:auto;margin-top:4px}
+.at-search-item{padding:0.6rem 0.75rem;cursor:pointer;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center}
+.at-search-item:last-child{border-bottom:none}
+.at-search-item:hover{background:var(--accent-lt)}
+.at-search-brand{font-weight:600;font-size:0.84rem}
+.at-search-meta{font-size:0.68rem;color:var(--muted)}
+.at-search-done{font-size:0.62rem;background:var(--ok-lt);color:var(--ok);border-radius:5px;padding:0.08rem 0.35rem;font-weight:700}
+.zone-chip{display:inline-flex;align-items:center;gap:0.25rem;padding:0.22rem 0.6rem;border-radius:20px;font-size:0.65rem;font-weight:700;border:1px solid var(--border);background:var(--bg);color:var(--muted)}
+.zone-chip.assigned{background:var(--accent-lt);color:var(--accent);border-color:var(--ok-border)}
+.at-report-section{background:var(--surface);border:1px solid var(--border);border-radius:12px;overflow:hidden;margin-bottom:0.7rem}
+.at-report-hdr{display:flex;justify-content:space-between;align-items:center;padding:0.65rem 0.9rem}
+.at-report-hdr-title{font-weight:700;font-size:0.82rem;color:#fff}
+.at-report-hdr-count{font-size:0.68rem;background:rgba(255,255,255,0.2);border-radius:10px;padding:0.08rem 0.5rem;font-weight:700;color:#fff}
+.fb-status{font-size:0.65rem;font-family:'JetBrains Mono',monospace;display:flex;align-items:center;gap:0.3rem}
+.fb-dot{width:7px;height:7px;border-radius:50%;flex-shrink:0}
+.fb-dot.connected{background:#22c55e}.fb-dot.disconnected{background:#ef4444}.fb-dot.connecting{background:var(--amber);animation:pulse 1s infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:0.4}}
+
+</style>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
+</head>
+<body>
+
+<!-- ══ TOP HEADER ══ -->
+<header class="app-hdr">
+  <div class="app-brand">⚕ Yagna Med</div>
+  <button class="api-key-btn" onclick="openApiModal()">🔑 API Key</button>
+</header>
+
+<!-- ══ VIEWS ══ -->
+
+<!-- HOME -->
+<div class="view active" id="view-home">
+  <div class="page">
+    <div style="text-align:center;padding:1.5rem 0 0.5rem">
+      <div style="font-size:2.2rem;margin-bottom:0.5rem">⚕</div>
+      <div style="font-weight:700;font-size:1.2rem;color:var(--accent)">Yagna Med Solutions</div>
+      <div style="font-size:0.8rem;color:var(--muted);margin-top:0.25rem">Pharmacy Intelligence Suite</div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.7rem">
+      <div class="card" style="cursor:pointer;border-left:3px solid var(--accent)" onclick="switchView('bm')">
+        <div style="font-size:1.4rem;margin-bottom:0.4rem">🗄️</div>
+        <div style="font-weight:700;font-size:0.9rem;margin-bottom:0.2rem">Brand Master</div>
+        <div style="font-size:0.72rem;color:var(--muted);line-height:1.5">Local drug database. Seed from Suvarna export.</div>
+        <div style="margin-top:0.5rem"><span id="home-bm-count" class="pill pill-ok">0 brands</span></div>
+      </div>
+      <div class="card" style="cursor:pointer;border-left:3px solid var(--blue)" onclick="switchView('de')">
+        <div style="font-size:1.4rem;margin-bottom:0.4rem">📋</div>
+        <div style="font-weight:700;font-size:0.9rem;margin-bottom:0.2rem">Drug Enrichment</div>
+        <div style="font-size:0.72rem;color:var(--muted);line-height:1.5">Paste brand names → AI fills all fields.</div>
+        <div style="margin-top:0.5rem"><span class="pill pill-blue">BM + AI</span></div>
+      </div>
+      <div class="card" style="cursor:pointer;border-left:3px solid var(--accent2)" onclick="switchView('mm')">
+        <div style="font-size:1.4rem;margin-bottom:0.4rem">🧬</div>
+        <div style="font-weight:700;font-size:0.9rem;margin-bottom:0.2rem">Molecule Mapper</div>
+        <div style="font-size:0.72rem;color:var(--muted);line-height:1.5">Group brands by composition. Upload enrichment export.</div>
+        <div style="margin-top:0.5rem"><span class="pill pill-muted">No AI</span></div>
+      </div>
+      <div class="card" style="cursor:pointer;border-left:3px solid var(--amber)" onclick="switchView('pa')">
+        <div style="font-size:1.4rem;margin-bottom:0.4rem">💊</div>
+        <div style="font-weight:700;font-size:0.9rem;margin-bottom:0.2rem">Opening Stock Loader</div>
+        <div style="font-size:0.72rem;color:var(--muted);line-height:1.5">Opening stock count. SYS vs PS. 5-sheet export.</div>
+        <div style="margin-top:0.5rem"><span id="home-pa-count" class="pill pill-warn">0 entries</span></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- BRAND MASTER -->
+<div class="view" id="view-bm">
+  <div class="page">
+    <div class="section-hdr">
+      <span class="section-title">🗄️ Brand Master</span>
+      <span id="bm-total-badge" class="pill pill-ok">0 brands</span>
+    </div>
+    <div class="filter-chips">
+      <button class="chip active" onclick="bmFilter('all',this)">All</button>
+      <button class="chip" onclick="bmFilter('complete',this)">✓ Complete</button>
+      <button class="chip" onclick="bmFilter('incomplete',this)">⚠ Incomplete</button>
+    </div>
+    <input class="search-bar" id="bm-search" placeholder="🔍 Search brand, molecule, supplier..." oninput="renderBM()">
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.5rem">
+      <button class="btn-primary" onclick="openBmAdd()">+ Add Brand</button>
+      <button class="btn-secondary" onclick="document.getElementById('bm-import-file').click()">📥 Import CSV/Excel</button>
+    </div>
+    <input type="file" id="bm-import-file" accept=".csv,.xlsx,.xls" style="display:none" onchange="importBM(event)">
+    <div id="bm-import-status" style="display:none"></div>
+    <div id="bm-list"></div>
+    <button class="btn-amber" id="bm-export-btn" onclick="exportBM()" disabled>⬇ Export Brand Master</button>
+  </div>
+</div>
+
+<!-- DRUG ENRICHMENT -->
+<div class="view" id="view-de">
+  <div class="page">
+    <div class="section-hdr">
+      <span class="section-title">📋 Drug Enrichment</span>
+    </div>
+    <div class="card">
+      <div style="font-size:0.65rem;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:var(--muted);margin-bottom:0.5rem">Enter Brand Names (one per line)</div>
+      <textarea class="de-input-area" id="de-input" placeholder="AUGMENTIN 625&#10;BACTRIM DS&#10;PANTODAC 40&#10;CROCIN 500&#10;..."></textarea>
+      <div style="display:flex;gap:0.5rem;margin-top:0.5rem;align-items:center">
+        <button class="btn-secondary" style="flex-shrink:0" onclick="document.getElementById('de-txt-file').click()">📄 From file</button>
+        <input type="file" id="de-txt-file" accept=".txt,.csv" style="display:none" onchange="loadDEFile(event)">
+        <span id="de-count-label" style="font-size:0.72rem;color:var(--muted)">0 brands</span>
+      </div>
+    </div>
+    <div class="card" id="de-progress-card" style="display:none">
+      <div style="display:flex;justify-content:space-between;margin-bottom:0.4rem">
+        <span style="font-size:0.72rem;font-weight:600" id="de-prog-label">Processing...</span>
+        <span style="font-size:0.72rem;font-family:'JetBrains Mono',monospace" id="de-prog-nums">0/0</span>
+      </div>
+      <div class="progress-bar-wrap"><div class="progress-bar-fill" id="de-prog-bar" style="width:0%"></div></div>
+      <div style="font-size:0.68rem;color:var(--muted);margin-top:0.35rem;font-family:'JetBrains Mono',monospace" id="de-prog-current"></div>
+    </div>
+    <button class="btn-primary" id="de-run-btn" onclick="runEnrichment()">✨ Enrich with AI</button>
+    <div id="de-results-wrap" style="display:none">
+      <div class="section-hdr">
+        <span class="section-title">Results</span>
+        <span id="de-results-count" class="pill pill-ok">0</span>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.5rem;margin-bottom:0.5rem">
+        <button class="btn-primary" onclick="exportDE('csv')">⬇ CSV</button>
+        <button class="btn-amber" onclick="exportDE('xlsx')">⬇ Excel</button>
+      </div>
+      <div class="tbl-wrap">
+        <table class="data-tbl" id="de-results-tbl">
+          <thead><tr>
+            <th>#</th><th>Brand</th><th>ILO</th><th>Group</th><th>Generic Name</th>
+            <th>Category</th><th>Pack Size</th><th>Marketed By</th><th>Mfd For</th><th>Source</th>
+          </tr></thead>
+          <tbody id="de-results-body"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- MOLECULE MAPPER -->
+<div class="view" id="view-mm">
+  <div class="page">
+    <div class="section-hdr">
+      <span class="section-title">🧬 Molecule Mapper</span>
+    </div>
+    <div class="import-zone" id="mm-drop" onclick="document.getElementById('mm-file').click()" ondragover="event.preventDefault();this.classList.add('drag')" ondragleave="this.classList.remove('drag')" ondrop="mmDrop(event)">
+      <div class="iz-icon">📊</div>
+      <div class="iz-label">Upload Drug Enrichment Export</div>
+      <div class="iz-sub">CSV or Excel with Generic Name column</div>
+    </div>
+    <input type="file" id="mm-file" accept=".csv,.xlsx,.xls" style="display:none" onchange="loadMM(event)">
+    <div id="mm-stats" style="display:none">
+      <div class="stats-row">
+        <div class="stat-card"><div class="stat-val" id="mm-total">0</div><div class="stat-lbl">Brands</div></div>
+        <div class="stat-card"><div class="stat-val" id="mm-groups">0</div><div class="stat-lbl">Molecules</div></div>
+        <div class="stat-card"><div class="stat-val" id="mm-multi">0</div><div class="stat-lbl">Multi-brand</div></div>
+        <div class="stat-card"><div class="stat-val" id="mm-single">0</div><div class="stat-lbl">Single</div></div>
+      </div>
+    </div>
+    <div id="mm-controls" style="display:none">
+      <div class="filter-chips">
+        <button class="chip active" onclick="mmFilter('all',this)">All</button>
+        <button class="chip" onclick="mmFilter('multi',this)">Multi-brand</button>
+        <button class="chip" onclick="mmFilter('surgical',this)">Surgical</button>
+        <button class="chip" onclick="mmFilter('medical',this)">Medical</button>
+      </div>
+      <input class="search-bar" id="mm-search" placeholder="🔍 Search molecule or brand..." oninput="renderMM()">
+      <button class="btn-amber" onclick="exportMM()">⬇ Export Grouped Excel</button>
+    </div>
+    <div id="mm-list"></div>
+  </div>
+</div>
+
+<!-- PHARMAUDIT -->
+<div class="view" id="view-pa">
+  <div class="page" style="padding-bottom:0">
+    <div class="pa-sub-tabs">
+      <button class="pa-sub-tab active" id="pat-capture" onclick="paTab('capture')">📷 Capture</button>
+      <button class="pa-sub-tab" id="pat-review" onclick="paTab('review')">📋 Review <span id="pa-hdr-n" style="font-size:0.6rem;background:rgba(0,0,0,0.08);border-radius:8px;padding:0 4px;margin-left:2px">0</span></button>
+      <button class="pa-sub-tab" id="pat-report" onclick="paTab('report')">📊 Report</button>
+    </div>
+  </div>
+
+  <!-- PA CAPTURE -->
+  <div id="pa-view-capture" class="page">
+    <div class="camera-row">
+      <button class="cam-btn cam-btn-camera" onclick="document.getElementById('pa-cam').click()">
+        <span class="cb-icon">📷</span><span class="cb-label">Take Photo</span>
+      </button>
+      <button class="cam-btn cam-btn-gallery" onclick="document.getElementById('pa-gal').click()">
+        <span class="cb-icon">🖼️</span><span class="cb-label">Gallery</span>
+      </button>
+    </div>
+    <input type="file" id="pa-cam" accept="image/*" capture="environment" style="display:none" onchange="paAddPhotos(event)">
+    <input type="file" id="pa-gal" accept="image/*" multiple style="display:none" onchange="paAddPhotos(event)">
+    <div class="photo-strip-wrap" id="pa-strip-wrap">
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <span style="font-size:0.62rem;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:var(--muted)">Photos</span>
+        <span id="pa-photo-count" style="font-size:0.68rem;background:var(--accent);color:#fff;border-radius:10px;padding:0.08rem 0.5rem;font-weight:700">0</span>
+      </div>
+      <div class="photo-strip" id="pa-strip"></div>
+    </div>
+    <button class="btn-primary" id="pa-ai-btn" style="display:none" onclick="paExtract()">✨ Extract with AI</button>
+    <div class="ai-bar" id="pa-ai-bar"><div class="spinner" id="pa-ai-spin"></div><span id="pa-ai-msg"></span></div>
+    <div class="card">
+      <div class="form-grid">
+        <div class="field-section">🔹 Drug Identity</div>
+        <div class="field full"><label>Brand Name *</label><input id="pa-brand" type="text" placeholder="e.g. Augmentin 625"></div>
+        <div class="field full"><label>Molecule</label><input id="pa-mol" type="text" placeholder="e.g. Amoxicillin 500mg + Clavulanate 125mg"></div>
+        <div class="field"><label>Category</label>
+          <select id="pa-cat"><option value="">—</option><option>Tab</option><option>Capsule</option><option>Syrup</option><option>Injection</option><option>Cream</option><option>Ointment</option><option>Drops</option><option>Strips</option><option>Powder</option><option>Surgical</option><option>Device</option><option>Other</option></select>
+        </div>
+        <div class="field"><label>Pack Size</label><input id="pa-pack" type="text" placeholder="e.g. 10 Tabs/Strip"></div>
+        <div class="field-section">🔹 Batch &amp; Stock</div>
+        <div class="field"><label>Batch No</label><input id="pa-batch" type="text"></div>
+        <div class="field"><label>Expiry</label><input id="pa-expiry" type="text" placeholder="MAR 2026" oninput="paLiveExpiry(this)"></div>
+        <div class="field"><label>MRP (₹)</label><input id="pa-mrp" type="number" inputmode="decimal" placeholder="0.00"></div>
+        <div class="field"><label>Physical Stock (PS) *</label><input id="pa-qty" type="number" inputmode="numeric" placeholder="0"></div>
+        <div class="field"><label>Schedule</label>
+          <select id="pa-sch"><option value="OTC">OTC</option><option value="H">Sch H</option><option value="H1">Sch H1</option><option value="X">Sch X</option></select>
+        </div>
+        <div class="field-section">🔹 Manufacturer</div>
+        <div class="field full"><label>Marketed By</label><input id="pa-mkt" type="text" placeholder="e.g. Abbott India Ltd"></div>
+        <div class="field full"><label>Manufactured For</label><input id="pa-mfr" type="text" placeholder="e.g. GSK Pharma (if different)"></div>
+        <div class="field-section">🔹 Auditor</div>
+        <div class="field full"><label>Auditor Name</label><input id="pa-auditor" type="text" placeholder="Your name"></div>
+      </div>
+      <button class="btn-primary" style="margin-top:0.5rem" onclick="paSubmit()">✅ Add to Stock Loader</button>
+    </div>
+    <div class="card">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.6rem">
+        <span style="font-size:0.62rem;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:var(--muted)">Submitted</span>
+        <span class="pill pill-ok" id="pa-queue-count">0</span>
+      </div>
+      <div id="pa-queue"></div>
+    </div>
+  </div>
+
+  <!-- PA REVIEW -->
+  <div id="pa-view-review" style="display:none" class="page">
+    <div class="pa-sum-row">
+      <div class="pa-sum-card"><div class="pa-sv sv-all" id="ps-all">0</div><div class="pa-sl">Total</div></div>
+      <div class="pa-sum-card"><div class="pa-sv sv-eq" id="ps-eq">0</div><div class="pa-sl">SYS=PS</div></div>
+      <div class="pa-sum-card"><div class="pa-sv sv-hi" id="ps-hi">0</div><div class="pa-sl">SYS&gt;PS</div></div>
+      <div class="pa-sum-card"><div class="pa-sv sv-lo" id="ps-lo">0</div><div class="pa-sl">SYS&lt;PS</div></div>
+      <div class="pa-sum-card"><div class="pa-sv sv-exp" id="ps-exp">0</div><div class="pa-sl">Expired</div></div>
+    </div>
+    <div style="height:4px;background:var(--border);border-radius:2px;overflow:hidden">
+      <div id="pa-prog" style="height:100%;background:linear-gradient(90deg,var(--accent),#52b97a);border-radius:2px;transition:width 0.4s;width:0%"></div>
+    </div>
+    <div style="display:flex;gap:0.5rem;flex-wrap:wrap">
+      <input class="search-bar" style="flex:1;min-width:120px" id="pa-search" placeholder="🔍 Search..." oninput="renderReview()">
+      <select style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:0.45rem 0.65rem;font-family:'Space Grotesk',sans-serif;font-size:0.78rem;color:var(--text);outline:none;-webkit-appearance:none;appearance:none;background-image:url(&quot;data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%238a8278' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E&quot;);background-repeat:no-repeat;background-position:right 0.6rem center;padding-right:1.8rem" id="pa-filter" onchange="renderReview()">
+        <option value="all">All</option><option value="pending">Pending</option><option value="eq">SYS=PS</option>
+        <option value="sys-hi">SYS&gt;PS</option><option value="sys-lo">SYS&lt;PS</option>
+        <option value="expired">Expired</option><option value="ghost">Phys Only</option>
+      </select>
+    </div>
+    <div id="pa-review-list"></div>
+    <button class="btn-amber" id="pa-to-report-btn" disabled onclick="paTab('report')">📊 View Report &amp; Export</button>
+  </div>
+
+  <!-- PA REPORT -->
+  <div id="pa-view-report" style="display:none" class="page">
+    <div id="pa-report-sheets"></div>
+    <button class="btn-amber" id="pa-export-btn" style="display:none" onclick="paExport()">⬇ Export 5-Sheet Excel</button>
+  </div>
+</div>
+
+
+<!-- AUDIT TOOL VIEW -->
+<div class="view" id="view-at">
+  <div class="page">
+
+    <!-- ROLE SELECT SCREEN -->
+    <div id="at-role-screen">
+      <div style="font-size:2rem;margin-bottom:0.25rem">🔍</div>
+      <div class="at-role-title">Stock Audit Tool</div>
+      <div class="at-role-sub">Multi-auditor real-time audit.<br>Upload inventory → assign auditors → count stock.</div>
+      <div class="at-role-btns">
+        <button class="at-role-btn reviewer" onclick="atStartReviewer()">
+          <span class="rb-icon">👨‍💼</span>Reviewer<span style="font-size:0.65rem;opacity:0.8;font-weight:500">Create session</span>
+        </button>
+        <button class="at-role-btn auditor" onclick="atShowJoin()">
+          <span class="rb-icon">🧑‍⚕️</span>Auditor<span style="font-size:0.65rem;color:var(--muted);font-weight:500">Join session</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- REVIEWER SCREENS -->
+    <div id="at-reviewer-wrap" style="display:none">
+      <div class="at-sub-tabs">
+        <button class="at-sub-tab active" id="at-rt-setup" onclick="atRevTab('setup')">⚙ Setup</button>
+        <button class="at-sub-tab" id="at-rt-live" onclick="atRevTab('live')">📡 Live</button>
+        <button class="at-sub-tab" id="at-rt-report" onclick="atRevTab('report')">📊 Report</button>
+      </div>
+
+      <!-- SETUP TAB -->
+      <div id="at-rev-setup">
+        <div class="card" style="margin-bottom:0.7rem">
+          <div style="font-size:0.62rem;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:var(--muted);margin-bottom:0.6rem">Session Details</div>
+          <div class="form-grid">
+            <div class="field full"><label>Hospital Name</label><input id="at-hospital" type="text" placeholder="e.g. Mithra Medicare"></div>
+            <div class="field full"><label>Audit Date</label><input id="at-date" type="date"></div>
+          </div>
+        </div>
+        <div class="import-zone" id="at-inv-drop" onclick="document.getElementById('at-inv-file').click()" ondragover="event.preventDefault();this.classList.add('drag')" ondragleave="this.classList.remove('drag')" ondrop="atInvDrop(event)">
+          <div class="iz-icon">📦</div>
+          <div class="iz-label">Upload Inventory (Suvarna Export)</div>
+          <div class="iz-sub">CSV or Excel — needs Brand, Batch, System Stock columns</div>
+        </div>
+        <input type="file" id="at-inv-file" accept=".csv,.xlsx,.xls" style="display:none" onchange="atLoadInventory(event)">
+        <div id="at-inv-status" style="display:none;margin-top:0.5rem"></div>
+        <div id="at-inv-preview" style="display:none;margin-top:0.5rem">
+          <div class="at-live-grid" style="margin-bottom:0.5rem">
+            <div class="at-live-card"><div class="at-lv" id="at-inv-total">0</div><div class="at-ll">Items</div></div>
+            <div class="at-live-card"><div class="at-lv" id="at-inv-brands">0</div><div class="at-ll">Brands</div></div>
+            <div class="at-live-card"><div class="at-lv" id="at-inv-batches">0</div><div class="at-ll">Batches</div></div>
+            <div class="at-live-card"><div class="at-lv" id="at-inv-expiring" style="color:var(--amber)">0</div><div class="at-ll">Near Exp</div></div>
+          </div>
+        </div>
+        <button class="btn-primary" id="at-create-session-btn" onclick="atCreateSession()" disabled>🚀 Create Audit Session</button>
+      </div>
+
+      <!-- SESSION LIVE PANEL (after creation) -->
+      <div id="at-rev-session" style="display:none">
+        <div class="session-code-box" style="margin-bottom:0.7rem">
+          <div class="session-code-label">Session Code — Share with Auditors</div>
+          <div class="session-code" id="at-session-code">——</div>
+          <div class="session-code-sub" id="at-session-hospital">—</div>
+          <div style="display:flex;justify-content:center;margin-top:0.6rem">
+            <div class="fb-status"><div class="fb-dot connecting" id="at-fb-dot"></div><span id="at-fb-label">Connecting...</span></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- LIVE TAB -->
+      <div id="at-rev-live" style="display:none">
+        <div class="at-live-grid" style="margin-bottom:0.5rem">
+          <div class="at-live-card"><div class="at-lv" id="at-live-total">0</div><div class="at-ll">Total</div></div>
+          <div class="at-live-card"><div class="at-lv" id="at-live-counted" style="color:var(--ok)">0</div><div class="at-ll">Counted</div></div>
+          <div class="at-live-card"><div class="at-lv" id="at-live-disc" style="color:var(--amber)">0</div><div class="at-ll">Discrepancy</div></div>
+          <div class="at-live-card"><div class="at-lv" id="at-live-pct" style="color:var(--accent)">0%</div><div class="at-ll">Complete</div></div>
+        </div>
+        <div class="progress-bar-wrap" style="margin-bottom:0.7rem"><div class="progress-bar-fill" id="at-live-prog" style="width:0%"></div></div>
+        <div style="font-size:0.62rem;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:var(--muted);margin-bottom:0.4rem">Auditors</div>
+        <div id="at-auditor-list"><div class="empty"><span class="ei">🧑‍⚕️</span><p>Waiting for auditors to join...</p></div></div>
+        <div style="font-size:0.62rem;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:var(--muted);margin:0.7rem 0 0.4rem">Zone Assignment (Optional)</div>
+        <div id="at-zone-assign-wrap" style="display:none">
+          <div id="at-zone-list"></div>
+        </div>
+        <div style="font-size:0.62rem;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:var(--muted);margin:0.7rem 0 0.4rem">Recent Entries</div>
+        <div id="at-live-entries"><div class="empty"><span class="ei">⏳</span><p>No entries yet</p></div></div>
+      </div>
+
+      <!-- REPORT TAB -->
+      <div id="at-rev-report" style="display:none">
+        <div id="at-report-sheets"></div>
+        <button class="btn-amber" id="at-export-btn" onclick="atExport()" style="display:none">⬇ Export 4-Sheet Excel</button>
+        <button class="btn-primary" style="margin-top:0.5rem;background:var(--red-lt);color:var(--red);border:1px solid var(--red-border)" onclick="atCloseSession()">🔒 Close Session</button>
+      </div>
+    </div>
+
+    <!-- AUDITOR SCREENS -->
+    <div id="at-auditor-wrap" style="display:none">
+      <!-- JOIN SCREEN -->
+      <div id="at-join-screen">
+        <div style="text-align:center;padding:1rem 0 0.75rem">
+          <div style="font-size:1.8rem;margin-bottom:0.3rem">🧑‍⚕️</div>
+          <div style="font-weight:700;font-size:1rem;color:var(--accent)">Join Audit Session</div>
+        </div>
+        <div class="card">
+          <div class="form-grid">
+            <div class="field full"><label>Your Name *</label><input id="at-auditor-name" type="text" placeholder="e.g. Ravi Kumar"></div>
+            <div class="field full"><label>Session Code *</label><input id="at-session-code-input" type="text" placeholder="e.g. A3B7X2" maxlength="6" style="font-family:'JetBrains Mono',monospace;font-size:1.1rem;letter-spacing:3px;text-transform:uppercase"></div>
+          </div>
+          <button class="btn-primary" style="margin-top:0.6rem" onclick="atJoinSession()">→ Join Session</button>
+          <div class="ai-bar" id="at-join-bar" style="margin-top:0.5rem"><div class="spinner" id="at-join-spin"></div><span id="at-join-msg"></span></div>
+        </div>
+      </div>
+
+      <!-- COUNTING SCREEN -->
+      <div id="at-count-screen" style="display:none">
+        <div style="background:var(--accent-lt);border:1px solid var(--ok-border);border-radius:10px;padding:0.6rem 0.8rem;margin-bottom:0.7rem;display:flex;justify-content:space-between;align-items:center">
+          <div>
+            <div style="font-size:0.62rem;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:var(--ok)">Active Session</div>
+            <div style="font-weight:700;font-size:0.9rem" id="at-aud-session-info">—</div>
+          </div>
+          <div style="text-align:right">
+            <div style="font-size:0.6rem;color:var(--muted)">Auditor</div>
+            <div style="font-weight:700;font-size:0.8rem" id="at-aud-name-display">—</div>
+            <div style="font-family:'JetBrains Mono',monospace;font-size:0.72rem;color:var(--accent);font-weight:700" id="at-aud-count-display">0 counted</div>
+          </div>
+        </div>
+        <div id="at-zone-info" style="display:none;background:var(--blue-lt);border:1px solid var(--blue-border);border-radius:8px;padding:0.5rem 0.7rem;margin-bottom:0.6rem;font-size:0.78rem;color:var(--blue);font-weight:600"></div>
+        <div style="font-size:0.62rem;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:var(--muted);margin-bottom:0.35rem">Search Brand</div>
+        <div class="at-search-wrap" style="margin-bottom:0.6rem">
+          <input class="at-search" id="at-brand-search" type="text" placeholder="Type brand name..." oninput="atSearchBrand(this.value)" autocomplete="off">
+          <div class="at-search-results" id="at-search-results" style="display:none"></div>
+        </div>
+        <div id="at-selected-batches" style="display:none">
+          <div style="font-size:0.62rem;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:var(--muted);margin-bottom:0.4rem" id="at-selected-brand-label">—</div>
+          <div id="at-batch-list"></div>
+        </div>
+        <div style="font-size:0.62rem;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:var(--muted);margin:0.7rem 0 0.35rem">My Entries <span id="at-my-count" style="font-family:'JetBrains Mono',monospace;font-size:0.75rem;background:var(--accent);color:#fff;border-radius:8px;padding:0 5px">0</span></div>
+        <div id="at-my-entries"><div class="empty" style="padding:1rem"><span class="ei" style="font-size:1.5rem">📋</span><p>No entries yet</p></div></div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- BOTTOM NAV -->
+<nav class="bottom-nav">
+  <button class="nav-btn active" id="nav-home" onclick="switchView('home')">
+    <span class="nav-icon">🏠</span><span class="nav-label">Home</span>
+  </button>
+  <button class="nav-btn" id="nav-at" onclick="switchView('at')">
+    <span class="nav-icon">🔍</span><span class="nav-label">Audit</span>
+    <span class="nav-badge" id="nav-at-badge" style="display:none"></span>
+  </button>
+  <button class="nav-btn" id="nav-pa" onclick="switchView('pa')">
+    <span class="nav-icon">💊</span><span class="nav-label">Stock</span>
+    <span class="nav-badge" id="nav-pa-badge" style="display:none">0</span>
+  </button>
+  <button class="nav-btn" id="nav-mm" onclick="switchView('mm')">
+    <span class="nav-icon">🧬</span><span class="nav-label">Mapper</span>
+  </button>
+  <button class="nav-btn" id="nav-bm" onclick="switchView('bm')">
+    <span class="nav-icon">🗄️</span><span class="nav-label">Brands</span>
+    <span class="nav-badge" id="nav-bm-badge" style="display:none">0</span>
+  </button>
+  <button class="nav-btn" id="nav-de" onclick="switchView('de')">
+    <span class="nav-icon">📋</span><span class="nav-label">Enrich</span>
+  </button>
+</nav>
+
+<!-- BRAND MASTER ADD/EDIT MODAL -->
+<div class="modal-bg" id="bm-modal" onclick="closeBmIfBg(event)">
+  <div class="bottom-sheet">
+    <div class="sheet-title"><span id="bm-modal-title">Add Brand</span><button class="sheet-close" onclick="closeBmModal()">✕</button></div>
+    <div class="form-grid">
+      <div class="field full"><label>Item Name (Brand) *</label><input id="bm-f-name" type="text" placeholder="e.g. AUGMENTIN 625"></div>
+      <div class="field full"><label>Generic Name (Composition)</label><input id="bm-f-generic" type="text" placeholder="e.g. Amoxicillin 500mg + Clavulanate 125mg"></div>
+      <div class="field"><label>ILO</label>
+        <select id="bm-f-ilo"><option value="">—</option><option value="M">M — Medical</option><option value="S">S — Surgical</option></select>
+      </div>
+      <div class="field"><label>Group</label>
+        <select id="bm-f-group"><option value="">—</option><option value="MEDICAL">MEDICAL</option><option value="SURGICAL">SURGICAL</option></select>
+      </div>
+      <div class="field"><label>Category</label>
+        <select id="bm-f-cat"><option value="">—</option><option>Tab</option><option>Capsule</option><option>Syrup</option><option>Injection</option><option>Cream</option><option>Ointment</option><option>Drops</option><option>Strips</option><option>Powder</option><option>Surgical</option><option>Device</option><option>Other</option></select>
+      </div>
+      <div class="field"><label>Pack Size</label><input id="bm-f-pack" type="text" placeholder="e.g. 10 Tabs/Strip"></div>
+      <div class="field full"><label>Marketed By</label><input id="bm-f-mkt" type="text" placeholder="e.g. Abbott India Ltd"></div>
+      <div class="field full"><label>Manufactured For</label><input id="bm-f-mfr" type="text" placeholder="If different from Marketed By"></div>
+    </div>
+    <div class="sheet-actions">
+      <button class="btn-primary" onclick="saveBmRecord()">✓ Save</button>
+      <button class="btn-danger" id="bm-delete-btn" style="display:none" onclick="confirmBmDelete()">✕ Delete</button>
+    </div>
+  </div>
+</div>
+
+<!-- PA EDIT MODAL -->
+<div class="modal-bg" id="pa-edit-modal" onclick="closePaEditIfBg(event)">
+  <div class="bottom-sheet">
+    <div class="sheet-title"><span>✏️ Edit Entry</span><button class="sheet-close" onclick="closePaEdit()">✕</button></div>
+    <div class="form-grid">
+      <div class="field-section">🔹 Drug Identity</div>
+      <div class="field full"><label>Brand Name *</label><input id="pe-brand" type="text"></div>
+      <div class="field full"><label>Molecule</label><input id="pe-mol" type="text"></div>
+      <div class="field"><label>Category</label>
+        <select id="pe-cat"><option value="">—</option><option>Tab</option><option>Capsule</option><option>Syrup</option><option>Injection</option><option>Cream</option><option>Ointment</option><option>Drops</option><option>Strips</option><option>Powder</option><option>Surgical</option><option>Device</option><option>Other</option></select>
+      </div>
+      <div class="field"><label>Pack Size</label><input id="pe-pack" type="text"></div>
+      <div class="field-section">🔹 Batch &amp; Stock</div>
+      <div class="field"><label>Batch</label><input id="pe-batch" type="text"></div>
+      <div class="field"><label>Expiry</label><input id="pe-expiry" type="text"></div>
+      <div class="field"><label>MRP (₹)</label><input id="pe-mrp" type="number"></div>
+      <div class="field"><label>Physical Stock (PS)</label><input id="pe-qty" type="number"></div>
+      <div class="field"><label>System Stock (SYS)</label><input id="pe-sys" type="number"></div>
+      <div class="field"><label>Schedule</label>
+        <select id="pe-sch"><option value="OTC">OTC</option><option value="H">H</option><option value="H1">H1</option><option value="X">X</option></select>
+      </div>
+      <div class="field-section">🔹 Manufacturer</div>
+      <div class="field full"><label>Marketed By</label><input id="pe-mkt" type="text"></div>
+      <div class="field full"><label>Manufactured For</label><input id="pe-mfr" type="text"></div>
+      <div class="field full"><label>Remark</label><input id="pe-remark" type="text" placeholder="Reviewer note"></div>
+    </div>
+    <div class="sheet-actions">
+      <button class="btn-primary" onclick="savePaEdit()">✓ Save</button>
+      <button class="btn-danger" onclick="confirmPaDelete()">✕ Delete</button>
+    </div>
+  </div>
+</div>
+
+<!-- CONFIRM MODAL -->
+<div class="confirm-modal" id="confirm-modal">
+  <div class="confirm-box">
+    <div class="confirm-title" id="confirm-title">Are you sure?</div>
+    <div class="confirm-sub" id="confirm-sub">This cannot be undone.</div>
+    <div class="confirm-btns">
+      <button class="confirm-cancel" onclick="closeConfirm()">Cancel</button>
+      <button class="confirm-ok" id="confirm-ok-btn">Delete</button>
+    </div>
+  </div>
+</div>
+
+<!-- API KEY MODAL -->
+<div id="api-modal" onclick="closeApiIfBg(event)">
+  <div class="api-sheet">
+    <div class="api-sheet-title">🔑 Pharmacy Access Code</div>
+    <input type="password" id="api-key-input" placeholder="Enter pharmacy passcode">
+    <div style="font-size:0.72rem;color:var(--muted)">Required for Drug Enrichment and PharmAudit AI extraction. Ask your pharmacy admin for the code. Stored in this browser tab only.</div>
+    <button class="api-sheet-save" onclick="saveApiKey()">Save Code</button>
+  </div>
+</div>
+
+<!-- LIGHTBOX -->
+<div id="lightbox"><button id="lb-close" onclick="closeLB()">✕</button><img id="lb-img" src="" alt=""></div>
+
+<div id="toast"></div>
+<input type="file" id="de-txt-file-hidden" accept=".txt" style="display:none">
+
+<script>
+// ══════════════════════════════════════════════════════
+//  GLOBALS
+// ══════════════════════════════════════════════════════
+let apiKey = '';
+let currentView = 'home';
+
+// Brand Master (IndexedDB)
+let bmDB = null;
+let bmRecords = []; // in-memory cache
+let bmEditingId = null;
+let bmFilterMode = 'all';
+
+// Drug Enrichment
+let deResults = [];
+
+// Molecule Mapper
+let mmData = [];
+let mmFilterMode = 'all';
+
+// PharmAudit
+let paEntries = [];
+let paEid = 1;
+let paPhotos = [];
+let paEditingId = null;
+let paDeletingId = null;
+let paCurrentTab = 'capture';
+
+// ══════════════════════════════════════════════════════
+//  INIT
+// ══════════════════════════════════════════════════════
+window.addEventListener('load', () => {
+  const k = sessionStorage.getItem('ym_key');
+  if (k) { apiKey = k; document.getElementById('api-key-input').value = k; }
+  initDB();
+});
+
+// ══════════════════════════════════════════════════════
+//  NAVIGATION
+// ══════════════════════════════════════════════════════
+function switchView(v) {
+  document.querySelectorAll('.view').forEach(el => el.classList.remove('active'));
+  document.querySelectorAll('.nav-btn').forEach(el => el.classList.remove('active'));
+  document.getElementById('view-'+v).classList.add('active');
+  document.getElementById('nav-'+v).classList.add('active');
+  currentView = v;
+  if (v==='bm') { renderBM(); updateBMBadge(); }
+  if (v==='home') { updateHomeStats(); }
+  if (v==='pa') { renderQueue(); updatePASummary(); }
+  window.scrollTo(0,0);
+}
+
+function updateHomeStats() {
+  document.getElementById('home-bm-count').textContent = bmRecords.length + ' brands';
+  document.getElementById('home-pa-count').textContent = paEntries.length + ' entries';
+}
+
+// ══════════════════════════════════════════════════════
+//  API KEY
+// ══════════════════════════════════════════════════════
+function openApiModal() { document.getElementById('api-modal').classList.add('open'); }
+function closeApiIfBg(e) { if(e.target===document.getElementById('api-modal')) document.getElementById('api-modal').classList.remove('open'); }
+function saveApiKey() {
+  apiKey = document.getElementById('api-key-input').value.trim();
+  if (!apiKey) { toast('⚠ Enter the pharmacy access code'); return; }
+  sessionStorage.setItem('ym_key', apiKey);
+  document.getElementById('api-modal').classList.remove('open');
+  toast('✓ Access code saved');
+}
+
+// ══════════════════════════════════════════════════════
+//  INDEXEDDB — BRAND MASTER
+// ══════════════════════════════════════════════════════
+function initDB() {
+  const req = indexedDB.open('YagnaMedDB', 2);
+  req.onupgradeneeded = e => {
+    const db = e.target.result;
+    if (!db.objectStoreNames.contains('brands')) {
+      const store = db.createObjectStore('brands', { keyPath: 'id', autoIncrement: true });
+      store.createIndex('name', 'name', { unique: false });
+    }
+    if (!db.objectStoreNames.contains('pastate')) {
+      db.createObjectStore('pastate', { keyPath: 'id' });
+    }
+  };
+  req.onsuccess = e => {
+    bmDB = e.target.result;
+    loadAllBrands();
+    loadPA();
+  };
+  req.onerror = () => toast('⚠ IndexedDB failed — using memory only');
+}
+function loadAllBrands() {
+  if (!bmDB) return;
+  const tx = bmDB.transaction('brands','readonly');
+  const req = tx.objectStore('brands').getAll();
+  req.onsuccess = () => { bmRecords = req.result; updateBMBadge(); if(currentView==='bm') renderBM(); updateHomeStats(); };
+}
+function saveBrandToDB(record) {
+  return new Promise((res,rej) => {
+    if (!bmDB) { res(record); return; }
+    const tx = bmDB.transaction('brands','readwrite');
+    const store = tx.objectStore('brands');
+    const req = record.id ? store.put(record) : store.add(record);
+    req.onsuccess = () => { loadAllBrands(); res(record); };
+    req.onerror = rej;
+  });
+}
+function deleteBrandFromDB(id) {
+  return new Promise((res,rej) => {
+    if (!bmDB) { res(); return; }
+    const tx = bmDB.transaction('brands','readwrite');
+    tx.objectStore('brands').delete(id).onsuccess = () => { loadAllBrands(); res(); };
+  });
+}
+// ── PharmAudit persistence (survives refresh / accidental tab reload) ──
+function savePA() {
+  if (!bmDB) return;
+  try {
+    const tx = bmDB.transaction('pastate','readwrite');
+    tx.objectStore('pastate').put({ id:'current', entries:paEntries, eid:paEid });
+  } catch(e) { console.warn('savePA failed:', e.message); }
+}
+function loadPA() {
+  if (!bmDB) return;
+  try {
+    const tx = bmDB.transaction('pastate','readonly');
+    const req = tx.objectStore('pastate').get('current');
+    req.onsuccess = () => {
+      if (req.result && Array.isArray(req.result.entries)) {
+        paEntries = req.result.entries;
+        paEid = req.result.eid || (paEntries.reduce((m,e)=>Math.max(m,e.id||0),0) + 1);
+        if (typeof renderQueue === 'function') renderQueue();
+        if (typeof updatePASummary === 'function') updatePASummary();
+        if (typeof updateHomeStats === 'function') updateHomeStats();
+      }
+    };
+  } catch(e) { console.warn('loadPA failed:', e.message); }
+}
+function isBrandComplete(b) {
+  return !!(b.name && b.generic && b.ilo && b.group && b.category && b.packSize && b.marketedBy && b.mfr);
+}
+function lookupBrand(name) {
+  const n = name.trim().toUpperCase();
+  return bmRecords.find(b => b.name.toUpperCase() === n) || null;
+}
+
+// ══════════════════════════════════════════════════════
+//  BRAND MASTER UI
+// ══════════════════════════════════════════════════════
+function updateBMBadge() {
+  const n = bmRecords.length;
+  document.getElementById('bm-total-badge').textContent = n + ' brands';
+  const badge = document.getElementById('nav-bm-badge');
+  if (n > 0) { badge.textContent = n > 999 ? '999+' : n; badge.style.display = 'block'; }
+  else badge.style.display = 'none';
+  const exportBtn = document.getElementById('bm-export-btn');
+  if (exportBtn) exportBtn.disabled = n === 0;
+}
+function bmFilter(mode, el) {
+  bmFilterMode = mode;
+  document.querySelectorAll('#view-bm .chip').forEach(c => c.classList.remove('active'));
+  el.classList.add('active');
+  renderBM();
+}
+function renderBM() {
+  const q = (document.getElementById('bm-search').value||'').toLowerCase();
+  let rows = bmRecords.filter(b => {
+    const ms = !q || b.name.toLowerCase().includes(q) || (b.generic||'').toLowerCase().includes(q) || (b.marketedBy||'').toLowerCase().includes(q);
+    if (!ms) return false;
+    if (bmFilterMode === 'complete') return isBrandComplete(b);
+    if (bmFilterMode === 'incomplete') return !isBrandComplete(b);
+    return true;
+  });
+  const list = document.getElementById('bm-list');
+  if (!rows.length) {
+    list.innerHTML = `<div class="empty"><span class="ei">🗄️</span><p>${bmRecords.length ? 'No matches found.' : 'No brands yet.<br>Import a Suvarna export or add manually.'}</p></div>`;
+    return;
+  }
+  list.innerHTML = rows.map(b => {
+    const complete = isBrandComplete(b);
+    return `<div class="bm-record" onclick="openBmEdit(${b.id})">
+      <div class="bm-record-top">
+        <div>
+          <div class="bm-name">${b.name}</div>
+          <div class="bm-generic">${b.generic||'No composition'}</div>
+        </div>
+        <span class="pill ${complete?'pill-ok':'pill-warn'}">${complete?'✓ Complete':'⚠ Incomplete'}</span>
+      </div>
+      <div class="bm-meta">
+        ${b.category?`<span class="bm-tag">${b.category}</span>`:''}
+        ${b.packSize?`<span class="bm-tag">${b.packSize}</span>`:''}
+        ${b.marketedBy?`<span class="bm-tag complete">${b.marketedBy}</span>`:''}
+        ${b.ilo?`<span class="bm-tag">${b.ilo}</span>`:''}
+      </div>
+    </div>`;
+  }).join('');
+}
+function openBmAdd() {
+  bmEditingId = null;
+  ['bm-f-name','bm-f-generic','bm-f-pack','bm-f-mkt','bm-f-mfr'].forEach(id => document.getElementById(id).value = '');
+  document.getElementById('bm-f-ilo').value = '';
+  document.getElementById('bm-f-group').value = '';
+  document.getElementById('bm-f-cat').value = '';
+  document.getElementById('bm-modal-title').textContent = 'Add Brand';
+  document.getElementById('bm-delete-btn').style.display = 'none';
+  document.getElementById('bm-modal').classList.add('open');
+}
+function openBmEdit(id) {
+  const b = bmRecords.find(x => x.id === id); if (!b) return;
+  bmEditingId = id;
+  document.getElementById('bm-f-name').value = b.name||'';
+  document.getElementById('bm-f-generic').value = b.generic||'';
+  document.getElementById('bm-f-ilo').value = b.ilo||'';
+  document.getElementById('bm-f-group').value = b.group||'';
+  document.getElementById('bm-f-cat').value = b.category||'';
+  document.getElementById('bm-f-pack').value = b.packSize||'';
+  document.getElementById('bm-f-mkt').value = b.marketedBy||'';
+  document.getElementById('bm-f-mfr').value = b.mfr||'';
+  document.getElementById('bm-modal-title').textContent = 'Edit Brand';
+  document.getElementById('bm-delete-btn').style.display = 'block';
+  document.getElementById('bm-modal').classList.add('open');
+}
+function closeBmModal() { document.getElementById('bm-modal').classList.remove('open'); bmEditingId = null; }
+function closeBmIfBg(e) { if(e.target===document.getElementById('bm-modal')) closeBmModal(); }
+function saveBmRecord() {
+  const name = document.getElementById('bm-f-name').value.trim();
+  if (!name) { toast('⚠ Brand name required'); return; }
+  const record = {
+    name: name.toUpperCase(),
+    generic: document.getElementById('bm-f-generic').value.trim(),
+    ilo: document.getElementById('bm-f-ilo').value,
+    group: document.getElementById('bm-f-group').value,
+    category: document.getElementById('bm-f-cat').value,
+    packSize: document.getElementById('bm-f-pack').value.trim(),
+    marketedBy: document.getElementById('bm-f-mkt').value.trim(),
+    mfr: document.getElementById('bm-f-mfr').value.trim(),
+  };
+  if (bmEditingId) record.id = bmEditingId;
+  saveBrandToDB(record).then(() => { closeBmModal(); toast(bmEditingId ? '✓ Brand updated' : `✓ ${record.name} added`); });
+}
+function confirmBmDelete() {
+  showConfirm('Delete brand?', `"${document.getElementById('bm-f-name').value}" will be removed.`, () => {
+    deleteBrandFromDB(bmEditingId).then(() => { closeBmModal(); toast('Brand deleted'); });
+  });
+}
+
+// ── IMPORT ──
+function importBM(e) {
+  const file = e.target.files[0]; e.target.value = '';
+  if (!file) return;
+  const status = document.getElementById('bm-import-status');
+  status.style.display = 'block';
+  status.innerHTML = `<div class="ai-bar loading" style="display:flex"><div class="spinner"></div><span>Reading file...</span></div>`;
+  const reader = new FileReader();
+  reader.onload = async ev => {
+    try {
+      let rows = [];
+      if (file.name.endsWith('.csv')) {
+        const lines = ev.target.result.split('\n').map(l => l.split(',').map(c => c.trim().replace(/^"|"$/g,'')));
+        const hdrs = lines[0].map(h => h.toLowerCase());
+        for (let i = 1; i < lines.length; i++) {
+          const row = {}; hdrs.forEach((h,j) => row[h] = lines[i][j]||''); rows.push(row);
+        }
+      } else {
+        const wb = XLSX.read(new Uint8Array(ev.target.result), {type:'array'});
+        const ws = wb.Sheets[wb.SheetNames[0]];
+        rows = XLSX.utils.sheet_to_json(ws, {defval:''});
+        rows = rows.map(r => { const o={}; Object.keys(r).forEach(k => o[k.toLowerCase()]=String(r[k]||'')); return o; });
+      }
+      const nameCol = ['item name','brand','brand name','name','item_name'].find(c => rows[0] && c in rows[0]);
+      if (!nameCol) { status.innerHTML = `<div class="ai-bar error" style="display:flex"><span>⚠ No brand name column found. Expected "Item Name" or "Brand".</span></div>`; return; }
+      let added=0, updated=0, skipped=0;
+      for (const r of rows) {
+        const name = (r[nameCol]||'').trim().toUpperCase();
+        if (!name) { skipped++; continue; }
+        const existing = lookupBrand(name);
+        const record = {
+          name,
+          generic: r['generic name']||r['generic']||r['composition']||r['molecule']||'',
+          ilo: r['ilo']||'',
+          group: r['group name']||r['group']||'',
+          category: r['category']||r['form name']||r['form']||'',
+          packSize: r['pack size']||r['pack']||'',
+          marketedBy: r['marketed by']||r['supplier']||r['manufacturer']||'',
+          mfr: r['manufactured for']||r['mfd for']||'',
+        };
+        if (existing) { record.id = existing.id; updated++; }
+        else added++;
+        await saveBrandToDB(record);
+      }
+      status.innerHTML = `<div class="ai-bar success" style="display:flex"><span>✓ ${added} added, ${updated} updated, ${skipped} skipped</span></div>`;
+      setTimeout(() => { status.style.display='none'; }, 3000);
+    } catch(err) {
+      status.innerHTML = `<div class="ai-bar error" style="display:flex"><span>⚠ Import failed: ${err.message}</span></div>`;
+    }
+  };
+  if (file.name.endsWith('.csv')) reader.readAsText(file);
+  else reader.readAsArrayBuffer(file);
+}
+
+// ── EXPORT BM ──
+function exportBM() {
+  if (!bmRecords.length) return;
+  const hdrs = ['Item Name','ILO','Group Name','Generic Name','Category','Pack Size','Marketed By','Manufactured For'];
+  const rows = bmRecords.map(b => [b.name,b.ilo,b.group,b.generic,b.category,b.packSize,b.marketedBy,b.mfr]);
+  const wb = XLSX.utils.book_new();
+  const ws = XLSX.utils.aoa_to_sheet([hdrs,...rows]);
+  ws['!cols'] = [{wch:24},{wch:5},{wch:10},{wch:40},{wch:12},{wch:16},{wch:28},{wch:28}];
+  XLSX.utils.book_append_sheet(wb, ws, 'Brand Master');
+  XLSX.writeFile(wb, `YPS_BrandMaster_${new Date().toISOString().slice(0,10)}.xlsx`);
+  toast('📊 Brand Master exported!');
+}
+
+// ══════════════════════════════════════════════════════
+//  DRUG ENRICHMENT
+// ══════════════════════════════════════════════════════
+document.getElementById('de-input').addEventListener('input', function() {
+  const lines = this.value.split('\n').map(l=>l.trim()).filter(Boolean);
+  document.getElementById('de-count-label').textContent = lines.length + ' brands';
+});
+function loadDEFile(e) {
+  const file = e.target.files[0]; e.target.value = '';
+  const reader = new FileReader();
+  reader.onload = ev => {
+    document.getElementById('de-input').value = ev.target.result;
+    document.getElementById('de-input').dispatchEvent(new Event('input'));
+    toast('✓ File loaded');
+  };
+  reader.readAsText(file);
+}
+async function runEnrichment() {
+  const raw = document.getElementById('de-input').value;
+  const brands = raw.split('\n').map(l=>l.trim()).filter(Boolean);
+  if (!brands.length) { toast('⚠ Enter at least one brand name'); return; }
+  if (!apiKey) { openApiModal(); toast('⚠ Set your API key first'); return; }
+  const btn = document.getElementById('de-run-btn');
+  btn.disabled = true; btn.textContent = '⏳ Running...';
+  deResults = brands.map(b => ({ brand:b, ilo:'', group:'', generic:'', category:'', packSize:'', marketedBy:'', mfr:'', source:'pending' }));
+  document.getElementById('de-progress-card').style.display = 'block';
+  document.getElementById('de-results-wrap').style.display = 'none';
+  // Step 1: check Brand Master
+  let needAI = [];
+  deResults.forEach((r,i) => {
+    const hit = lookupBrand(r.brand);
+    if (hit && isBrandComplete(hit)) {
+      r.ilo=hit.ilo; r.group=hit.group; r.generic=hit.generic; r.category=hit.category;
+      r.packSize=hit.packSize; r.marketedBy=hit.marketedBy; r.mfr=hit.mfr; r.source='bm';
+    } else needAI.push(i);
+  });
+  const total = brands.length;
+  let done = total - needAI.length;
+  updateDEProgress(done, total, 'Checking Brand Master...');
+  // Step 2: AI for missing
+  const BATCH = 20;
+  for (let i = 0; i < needAI.length; i += BATCH) {
+    const batch = needAI.slice(i, i+BATCH);
+    const batchNames = batch.map(idx => deResults[idx].brand);
+    updateDEProgress(done, total, `AI: ${batchNames[0]}...`);
+    try {
+      const prompt = `You are a pharmaceutical expert specializing in Indian branded medicines.
+For each brand below, return a JSON array. Each object must have exactly these fields:
+brand, ilo (M or S), group (MEDICAL or SURGICAL), generic (INN+strength+combinations), category (Tab/Capsule/Syrup/Injection/Cream/Ointment/Drops/Strips/Powder/Surgical/Device/Other), packSize (e.g. "10 Tabs/Strip"), marketedBy (Indian marketing company), mfr (manufactured for — may be same as marketedBy).
+Never return blank. Best-guess if uncertain.
+
+Brands:
+${batchNames.map((n,j)=>`${j+1}. ${n}`).join('\n')}
+
+Return ONLY a JSON array, no markdown, no explanation.`;
+      const res = await fetch('/api/anthropic', {
+        method:'POST',
+        headers:{'Content-Type':'application/json','x-access-code':apiKey},
+        body:JSON.stringify({task:'text',max_tokens:2000,messages:[{role:'user',content:prompt}]})
+      });
+      const data = await res.json();
+      if (data.error) throw new Error(data.error.message);
+      const raw2 = data.content.map(c=>c.text||'').join('').replace(/```json|```/g,'').trim();
+      const arr = JSON.parse(raw2);
+      arr.forEach((item, j) => {
+        const idx = batch[j];
+        if (idx === undefined) return;
+        deResults[idx].ilo = item.ilo||''; deResults[idx].group = item.group||'';
+        deResults[idx].generic = item.generic||''; deResults[idx].category = item.category||'';
+        deResults[idx].packSize = item.packSize||''; deResults[idx].marketedBy = item.marketedBy||'';
+        deResults[idx].mfr = item.mfr||''; deResults[idx].source = 'ai';
+        // auto-save to BM
+        saveBrandToDB({ name:deResults[idx].brand.toUpperCase(), generic:item.generic, ilo:item.ilo, group:item.group, category:item.category, packSize:item.packSize, marketedBy:item.marketedBy, mfr:item.mfr });
+      });
+    } catch(err) {
+      batch.forEach(idx => { deResults[idx].source = 'error'; });
+      console.error('AI batch error:', err);
+    }
+    done += batch.length;
+    updateDEProgress(done, total, done < total ? `Processing...` : 'Done!');
+  }
+  renderDEResults();
+  btn.disabled = false; btn.textContent = '✨ Enrich with AI';
+  document.getElementById('de-progress-card').style.display = 'none';
+  const errCount = deResults.filter(r => r.source === 'error').length;
+  if (errCount) toast(`⚠ ${total - errCount}/${total} enriched — ${errCount} failed. Click Enrich again to retry.`);
+  else toast(`✓ ${total} brands enriched`);
+}
+function updateDEProgress(done, total, label) {
+  document.getElementById('de-prog-label').textContent = label;
+  document.getElementById('de-prog-nums').textContent = `${done}/${total}`;
+  document.getElementById('de-prog-bar').style.width = total ? (done/total*100)+'%' : '0%';
+}
+function renderDEResults() {
+  const wrap = document.getElementById('de-results-wrap');
+  wrap.style.display = 'block';
+  document.getElementById('de-results-count').textContent = deResults.length;
+  const tbody = document.getElementById('de-results-body');
+  tbody.innerHTML = deResults.map((r,i) => {
+    const srcCls = r.source==='bm'?'sb-bm':r.source==='ai'?'sb-ai':'sb-pending';
+    const srcLabel = r.source==='bm'?'Brand Master':r.source==='ai'?'AI':r.source==='error'?'⚠ Failed':'—';
+    return `<tr>
+      <td>${i+1}</td>
+      <td><strong>${r.brand}</strong></td>
+      <td>${r.ilo||'—'}</td><td>${r.group||'—'}</td>
+      <td style="max-width:180px;white-space:normal">${r.generic||'—'}</td>
+      <td>${r.category||'—'}</td><td>${r.packSize||'—'}</td>
+      <td>${r.marketedBy||'—'}</td><td>${r.mfr||'—'}</td>
+      <td><span class="source-badge ${srcCls}">${srcLabel}</span></td>
+    </tr>`;
+  }).join('');
+}
+function exportDE(fmt) {
+  if (!deResults.length) return;
+  const hdrs = ['Item Name','ILO','Group Name','Generic Name','Category','Pack Size','Marketed By','Manufactured For'];
+  const rows = deResults.map(r => [r.brand, r.ilo, r.group, r.generic, r.category, r.packSize, r.marketedBy, r.mfr]);
+  if (fmt === 'csv') {
+    const csv = [hdrs, ...rows].map(r => r.map(c => `"${(c||'').replace(/"/g,'""')}"`).join(',')).join('\n');
+    const a = document.createElement('a');
+    a.href = 'data:text/csv;charset=utf-8,'+encodeURIComponent(csv);
+    a.download = `YPS_DrugEnrichment_${new Date().toISOString().slice(0,10)}.csv`;
+    a.click();
+    toast('📄 CSV exported!');
+  } else {
+    const wb = XLSX.utils.book_new();
+    const ws = XLSX.utils.aoa_to_sheet([hdrs,...rows]);
+    ws['!cols'] = [{wch:24},{wch:5},{wch:10},{wch:40},{wch:12},{wch:16},{wch:28},{wch:28}];
+    XLSX.utils.book_append_sheet(wb, ws, 'Drug Enrichment');
+    XLSX.writeFile(wb, `YPS_DrugEnrichment_${new Date().toISOString().slice(0,10)}.xlsx`);
+    toast('📊 Excel exported!');
+  }
+}
+
+// ══════════════════════════════════════════════════════
+//  MOLECULE MAPPER
+// ══════════════════════════════════════════════════════
+function mmDrop(e) {
+  e.preventDefault(); e.target.classList.remove('drag');
+  const file = e.dataTransfer.files[0];
+  if (file) loadMMFile(file);
+}
+function loadMM(e) { const f=e.target.files[0]; e.target.value=''; if(f) loadMMFile(f); }
+function loadMMFile(file) {
+  const reader = new FileReader();
+  reader.onload = ev => {
+    try {
+      let rows = [];
+      if (file.name.endsWith('.csv')) {
+        const lines = ev.target.result.split('\n').map(l=>l.split(',').map(c=>c.trim().replace(/^"|"$/g,'')));
+        const hdrs = lines[0].map(h=>h.toLowerCase());
+        for (let i=1;i<lines.length;i++) { const r={}; hdrs.forEach((h,j)=>r[h]=lines[i][j]||''); rows.push(r); }
+      } else {
+        const wb = XLSX.read(new Uint8Array(ev.target.result),{type:'array'});
+        const ws = wb.Sheets[wb.SheetNames[0]];
+        rows = XLSX.utils.sheet_to_json(ws,{defval:''});
+        rows = rows.map(r=>{const o={};Object.keys(r).forEach(k=>o[k.toLowerCase()]=String(r[k]||''));return o;});
+      }
+      const genericCol = ['generic name','generic','composition','molecule'].find(c=>rows[0]&&c in rows[0]);
+      const brandCol = ['item name','brand','brand name','name'].find(c=>rows[0]&&c in rows[0]);
+      if (!genericCol||!brandCol) { toast('⚠ Need "Generic Name" and "Brand" columns'); return; }
+      mmData = rows.filter(r=>r[brandCol]).map(r=>({
+        brand: r[brandCol]||'', generic: r[genericCol]||'Unknown',
+        supplier: r['marketed by']||r['supplier']||r['manufacturer']||'',
+        category: r['category']||r['form name']||'',
+        ilo: r['ilo']||''
+      }));
+      renderMM(); updateMMStats();
+      document.getElementById('mm-stats').style.display='block';
+      document.getElementById('mm-controls').style.display='flex';
+      document.getElementById('mm-controls').style.flexDirection='column';
+      document.getElementById('mm-controls').style.gap='0.5rem';
+      document.getElementById('mm-drop').style.display='none';
+      toast(`✓ ${mmData.length} brands loaded`);
+    } catch(err) { toast('⚠ Failed to read file: '+err.message); }
+  };
+  if (file.name.endsWith('.csv')) reader.readAsText(file);
+  else reader.readAsArrayBuffer(file);
+}
+function updateMMStats() {
+  const groups = groupMM(mmData);
+  const keys = Object.keys(groups);
+  document.getElementById('mm-total').textContent = mmData.length;
+  document.getElementById('mm-groups').textContent = keys.length;
+  document.getElementById('mm-multi').textContent = keys.filter(k=>groups[k].length>1).length;
+  document.getElementById('mm-single').textContent = keys.filter(k=>groups[k].length===1).length;
+}
+function groupMM(data) {
+  const g = {};
+  data.forEach(r => {
+    const key = (r.generic||'Unknown').trim().toLowerCase();
+    if (!g[key]) g[key] = [];
+    g[key].push(r);
+  });
+  return g;
+}
+function mmFilter(mode, el) {
+  mmFilterMode = mode;
+  document.querySelectorAll('#view-mm .chip').forEach(c=>c.classList.remove('active'));
+  el.classList.add('active');
+  renderMM();
+}
+function renderMM() {
+  const q = (document.getElementById('mm-search').value||'').toLowerCase();
+  const groups = groupMM(mmData);
+  let keys = Object.keys(groups).sort();
+  if (mmFilterMode === 'multi') keys = keys.filter(k=>groups[k].length>1);
+  if (mmFilterMode === 'surgical') keys = keys.filter(k=>groups[k].some(r=>r.ilo==='S'||r.category==='Surgical'));
+  if (mmFilterMode === 'medical') keys = keys.filter(k=>groups[k].every(r=>r.ilo!=='S'&&r.category!=='Surgical'));
+  if (q) keys = keys.filter(k=>k.includes(q)||groups[k].some(r=>r.brand.toLowerCase().includes(q)));
+  const list = document.getElementById('mm-list');
+  if (!keys.length) { list.innerHTML=`<div class="empty"><span class="ei">🧬</span><p>No groups match.</p></div>`; return; }
+  list.innerHTML = keys.map(k => {
+    const brands = groups[k];
+    const display = brands[0].generic;
+    const formChip = brands[0].category ? `<span class="mm-form-chip">${brands[0].category}</span>` : '';
+    return `<div class="mm-group" id="mmg-${k.replace(/[^a-z0-9]/g,'_')}">
+      <div class="mm-group-hdr" onclick="toggleMMGroup(this)">
+        <div class="mm-molecule">${display}</div>
+        ${formChip}
+        <span class="mm-count-badge">${brands.length}</span>
+        <span class="mm-chevron">▼</span>
+      </div>
+      <div class="mm-brands">
+        ${brands.map(b=>`<div class="mm-brand-row">
+          <span class="mm-brand-name">${b.brand}</span>
+          <span class="mm-brand-sup">${b.supplier||'—'}</span>
+        </div>`).join('')}
+      </div>
+    </div>`;
+  }).join('');
+}
+function toggleMMGroup(hdr) {
+  hdr.closest('.mm-group').classList.toggle('open');
+}
+function exportMM() {
+  if (!mmData.length) return;
+  const groups = groupMM(mmData);
+  const hdrs = ['Generic Name','Brand','Supplier','Category','ILO'];
+  const rows = [];
+  Object.keys(groups).sort().forEach(k => {
+    groups[k].forEach(b => rows.push([b.generic, b.brand, b.supplier, b.category, b.ilo]));
+  });
+  const wb = XLSX.utils.book_new();
+  const ws = XLSX.utils.aoa_to_sheet([hdrs,...rows]);
+  ws['!cols'] = [{wch:40},{wch:24},{wch:28},{wch:12},{wch:5}];
+  XLSX.utils.book_append_sheet(wb,ws,'Molecule Mapper');
+  XLSX.writeFile(wb,`YPS_MoleculeMapper_${new Date().toISOString().slice(0,10)}.xlsx`);
+  toast('📊 Mapper exported!');
+}
+
+// ══════════════════════════════════════════════════════
+//  PHARMAUDIT
+// ══════════════════════════════════════════════════════
+function paTab(t) {
+  paCurrentTab = t;
+  ['capture','review','report'].forEach(n => {
+    document.getElementById('pa-view-'+n).style.display = n===t?'block':'none';
+    document.getElementById('pat-'+n).classList.toggle('active', n===t);
+  });
+  if (t==='review') { renderReview(); updatePASummary(); }
+  if (t==='report') { renderPAReport(); }
+  window.scrollTo(0,0);
+}
+// Photos
+// Downscale + JPEG-compress before base64 so uploads stay under serverless limits and AI calls stay fast/cheap.
+function paCompressImage(file, maxDim=1280, quality=0.7) {
+  return new Promise(resolve => {
+    const r = new FileReader();
+    r.onload = ev => {
+      const img = new Image();
+      img.onload = () => {
+        let {width:w, height:h} = img;
+        if (w > maxDim || h > maxDim) {
+          const scale = maxDim / Math.max(w, h);
+          w = Math.round(w * scale); h = Math.round(h * scale);
+        }
+        try {
+          const c = document.createElement('canvas');
+          c.width = w; c.height = h;
+          c.getContext('2d').drawImage(img, 0, 0, w, h);
+          resolve(c.toDataURL('image/jpeg', quality));
+        } catch(err) {
+          resolve(ev.target.result); // fallback: original (e.g. tainted canvas)
+        }
+      };
+      img.onerror = () => resolve(ev.target.result);
+      img.src = ev.target.result;
+    };
+    r.readAsDataURL(file);
+  });
+}
+async function paAddPhotos(e) {
+  const files = Array.from(e.target.files); e.target.value='';
+  if (!files.length) return;
+  for (const file of files) {
+    const dataUrl = await paCompressImage(file);
+    paPhotos.push({src:dataUrl, b64:dataUrl.split(',')[1]});
+  }
+  renderPAStrip();
+  document.getElementById('pa-ai-btn').style.display='flex';
+}
+function removePAPhoto(idx) {
+  paPhotos.splice(idx,1); renderPAStrip();
+  if(!paPhotos.length) document.getElementById('pa-ai-btn').style.display='none';
+}
+function renderPAStrip() {
+  const wrap=document.getElementById('pa-strip-wrap');
+  document.getElementById('pa-photo-count').textContent=paPhotos.length;
+  if(!paPhotos.length){wrap.style.display='none';return;}
+  wrap.style.display='flex';
+  document.getElementById('pa-strip').innerHTML=paPhotos.map((p,i)=>`
+    <div class="photo-thumb"><img src="${p.src}" onclick="openLB('${p.src}')">
+    <button class="photo-thumb-del" onclick="removePAPhoto(${i})">✕</button></div>`).join('')+
+    `<div class="photo-add-tile" onclick="document.getElementById('pa-gal').click()"><span>＋</span>More</div>`;
+}
+// AI Extract
+async function paExtract() {
+  if(!paPhotos.length)return;
+  if(!apiKey){openApiModal();toast('⚠ Enter access code first');return;}
+  const btn=document.getElementById('pa-ai-btn'); btn.disabled=true;
+  setPABar('loading',`Reading ${paPhotos.length} photo(s)...`);
+  try {
+    const imgBlocks=paPhotos.map(p=>({type:'image',source:{type:'base64',media_type:'image/jpeg',data:p.b64}}));
+    const txtBlock={type:'text',text:`Extract medicine details from ${paPhotos.length} photo(s). Return ONLY JSON:
+{"brand":"brand+strength","molecule":"INN+strength","category":"Tab/Capsule/Syrup/Injection/Cream/Ointment/Drops/Strips/Powder/Surgical/Device/Other","pack_size":"e.g. 10 Tabs/Strip","batch":"batch no","expiry":"e.g. MAR 2026","mrp":"number only","marketed_by":"Indian marketing company","manufactured_for":"company on whose behalf manufactured","schedule":"OTC/H/H1/X"}`};
+    const res=await fetch('/api/anthropic',{method:'POST',headers:{'Content-Type':'application/json','x-access-code':apiKey},body:JSON.stringify({task:'vision',max_tokens:1000,messages:[{role:'user',content:[...imgBlocks,txtBlock]}]})});
+    const data=await res.json();
+    if(data.error)throw new Error(data.error.message);
+    const d=JSON.parse(data.content.map(c=>c.text||'').join('').replace(/```json|```/g,'').trim());
+    paFillForm(d);
+    setPABar('success',`✓ Extracted — review & submit`);
+    setTimeout(()=>document.getElementById('pa-brand').scrollIntoView({behavior:'smooth',block:'start'}),200);
+  } catch(err) { const m=err.message||''; setPABar('error',(m.includes('401')||/access code/i.test(m))?'⚠ Invalid access code':'⚠ AI failed — fill manually'); }
+  btn.disabled=false;
+}
+function paFillForm(d) {
+  const m={'pa-brand':d.brand,'pa-mol':d.molecule,'pa-pack':d.pack_size,'pa-batch':d.batch,'pa-expiry':d.expiry,'pa-mrp':d.mrp,'pa-mkt':d.marketed_by,'pa-mfr':d.manufactured_for};
+  Object.entries(m).forEach(([id,val])=>{if(val){const el=document.getElementById(id);el.value=val;el.classList.add('ai-ok');}});
+  if(d.category){const el=document.getElementById('pa-cat');for(const o of el.options)if(o.value===d.category){el.value=d.category;break;}}
+  if(d.schedule){const s=document.getElementById('pa-sch');for(const o of ['OTC','H1','H','X'])if(d.schedule.toUpperCase().includes(o)){s.value=o;break;}}
+  paLiveExpiry(document.getElementById('pa-expiry'));
+}
+function setPABar(type,msg) {
+  const el=document.getElementById('pa-ai-bar');el.className='ai-bar';
+  if(!type){el.style.display='none';return;}
+  el.classList.add(type);el.style.display='flex';
+  document.getElementById('pa-ai-spin').style.display=type==='loading'?'block':'none';
+  document.getElementById('pa-ai-msg').textContent=msg;
+}
+function paLiveExpiry(el) {
+  el.classList.remove('exp-warn','exp-danger');
+  const s=expiryStatus(el.value);
+  if(s==='danger')el.classList.add('exp-danger');else if(s==='warn')el.classList.add('exp-warn');
+}
+function expiryStatus(val) {
+  if(!val)return'';
+  const MON=['JAN','FEB','MAR','APR','MAY','JUN','JUL','AUG','SEP','OCT','NOV','DEC'];
+  const parts=val.toUpperCase().split(/[\s\/\-]+/);
+  let m=-1,y=-1;
+  for(const p of parts){const mi=MON.indexOf(p);if(mi>=0)m=mi;if(/^\d{4}$/.test(p))y=+p;if(/^\d{2}$/.test(p)&&+p>12)y=2000+(+p);if(/^\d{2}$/.test(p)&&+p>0&&+p<=12&&m<0)m=+p-1;}
+  if(m>=0&&y>0){const diff=(new Date(y,m+1,0)-new Date())/86400000;if(diff<0)return'danger';if(diff<90)return'warn';return'ok';}return'';
+}
+function paSubmit() {
+  const brand=document.getElementById('pa-brand').value.trim();
+  if(!brand){toast('⚠ Brand name required');document.getElementById('pa-brand').focus();return;}
+  paEntries.unshift({id:paEid++,brand,molecule:document.getElementById('pa-mol').value.trim(),category:document.getElementById('pa-cat').value,packSize:document.getElementById('pa-pack').value.trim(),batch:document.getElementById('pa-batch').value.trim(),expiry:document.getElementById('pa-expiry').value.trim(),mrp:document.getElementById('pa-mrp').value,qty:document.getElementById('pa-qty').value,sys:'',schedule:document.getElementById('pa-sch').value,marketedBy:document.getElementById('pa-mkt').value.trim(),mfr:document.getElementById('pa-mfr').value.trim(),auditor:document.getElementById('pa-auditor').value.trim(),photos:paPhotos.map(p=>p.src),status:'pending',remark:'',edited:false,time:new Date().toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'})});
+  // ── Auto-save to Brand Master ──
+  const existing = lookupBrand(brand);
+  const bmRecord = {
+    name: brand.toUpperCase(),
+    generic: document.getElementById('pa-mol').value.trim(),
+    ilo: '',
+    group: '',
+    category: document.getElementById('pa-cat').value,
+    packSize: document.getElementById('pa-pack').value.trim(),
+    marketedBy: document.getElementById('pa-mkt').value.trim(),
+    mfr: document.getElementById('pa-mfr').value.trim(),
+  };
+  if (existing) {
+    // Only update fields that are currently blank in Brand Master
+    if (!existing.generic && bmRecord.generic) existing.generic = bmRecord.generic;
+    if (!existing.category && bmRecord.category) existing.category = bmRecord.category;
+    if (!existing.packSize && bmRecord.packSize) existing.packSize = bmRecord.packSize;
+    if (!existing.marketedBy && bmRecord.marketedBy) existing.marketedBy = bmRecord.marketedBy;
+    if (!existing.mfr && bmRecord.mfr) existing.mfr = bmRecord.mfr;
+    saveBrandToDB(existing);
+  } else {
+    saveBrandToDB(bmRecord);
+  }
+  paClearForm();paPhotos=[];renderPAStrip();document.getElementById('pa-ai-btn').style.display='none';setPABar('');
+  savePA();renderQueue();updatePASummary();toast(`✅ ${brand} added → saved to Brand Master`);window.scrollTo({top:0,behavior:'smooth'});
+}
+function paClearForm() {
+  ['pa-brand','pa-mol','pa-pack','pa-batch','pa-expiry','pa-mrp','pa-qty','pa-mkt','pa-mfr','pa-auditor'].forEach(id=>{const el=document.getElementById(id);el.value='';el.classList.remove('ai-ok','exp-warn','exp-danger');});
+  document.getElementById('pa-cat').value='';document.getElementById('pa-sch').value='OTC';
+}
+function renderQueue() {
+  const c=document.getElementById('pa-queue');
+  document.getElementById('pa-queue-count').textContent=paEntries.length;
+  document.getElementById('pa-hdr-n').textContent=paEntries.length;
+  const nb=document.getElementById('nav-pa-badge');
+  if(paEntries.length>0){nb.textContent=paEntries.length;nb.style.display='block';}else nb.style.display='none';
+  if(!paEntries.length){c.innerHTML=`<div class="empty"><span class="ei">🧾</span><p>No entries yet</p></div>`;return;}
+  c.innerHTML=paEntries.slice(0,5).map(e=>{
+    const es=expiryStatus(e.expiry);const expCls=es==='danger'?'exp-danger':es==='warn'?'exp-warn':'';
+    return `<div class="queue-item" style="padding:0.55rem 0.65rem;border-radius:8px;margin-bottom:0.3rem;background:var(--bg);border:1px solid var(--border);display:flex;justify-content:space-between;align-items:center">
+      <div><div style="font-weight:600;font-size:0.8rem">${e.brand}</div><div style="font-size:0.68rem;color:var(--muted)">${e.category||'—'} · ${e.schedule}</div></div>
+      <div style="text-align:right"><div class="${expCls}" style="font-size:0.7rem;font-family:'JetBrains Mono',monospace">${e.expiry||'—'}</div><div style="font-size:0.62rem;color:var(--muted)">${e.time}</div></div>
+    </div>`;
+  }).join('')+(paEntries.length>5?`<div style="text-align:center;font-size:0.72rem;color:var(--muted);padding:0.4rem">+${paEntries.length-5} more</div>`:'');
+}
+function paComputeStatus(e) {
+  if(e.status==='expired')return'expired';if(e.status==='ghost')return'ghost';
+  if(e.sys===''||e.sys===null||e.sys===undefined)return'pending';
+  const ps=parseFloat(e.qty)||0,sys=parseFloat(e.sys)||0;
+  if(sys===ps)return'eq';if(sys>ps)return'sys-hi';return'sys-lo';
+}
+function paStatusPill(st) {
+  const m={pending:['pill-muted','⏳ Pending'],eq:['pill-ok','✓ SYS=PS'],'sys-hi':['pill-warn','↑ SYS>PS'],'sys-lo':['pill-blue','↓ SYS<PS'],expired:['pill-err','⚠ Expired'],ghost:['pill-muted','👻 Phys Only']};
+  const[cls,lbl]=m[st]||m.pending;return`<span class="pill ${cls}">${lbl}</span>`;
+}
+function renderReview() {
+  const q=(document.getElementById('pa-search').value||'').toLowerCase();
+  const sf=document.getElementById('pa-filter').value;
+  const rows=paEntries.filter(e=>{
+    const cs=paComputeStatus(e);
+    const ms=!q||e.brand.toLowerCase().includes(q)||(e.molecule||'').toLowerCase().includes(q);
+    return ms&&(sf==='all'||cs===sf);
+  });
+  const list=document.getElementById('pa-review-list');
+  if(!rows.length){list.innerHTML=`<div class="empty"><span class="ei">${paEntries.length?'🔍':'📦'}</span><p>${paEntries.length?'No matches.':'Use Capture tab to add entries.'}</p></div>`;return;}
+  list.innerHTML=rows.map(e=>{
+    const st2=paComputeStatus(e);const es=expiryStatus(e.expiry);
+    const expCls=es==='danger'?'exp-danger':es==='warn'?'exp-warn':es==='ok'?'exp-ok':'';
+    const ps=e.qty!==''?e.qty:'—';const sysVal=e.sys!==''?e.sys:'—';
+    const diff=e.sys!==''&&e.qty!==''?parseFloat(e.sys)-parseFloat(e.qty):null;
+    const diffStr=diff===null?'—':(diff>0?'+':'')+diff;
+    const diffCls=diff===null?'':diff>0?'pos':diff<0?'neg':'zero';
+    const photos=e.photos?.length?`<div class="ec-photos">${e.photos.map(s=>`<img class="ec-photo" src="${s}" onclick="openLB('${s}')">`).join('')}</div>`:'';
+    return `<div class="entry-card st-${st2}" id="ec-${e.id}">
+      <div class="ec-top"><div><div class="ec-name">${e.brand}${e.edited?`<span class="edited-badge">Edited</span>`:''}</div><div class="ec-mol">${e.molecule||'—'}</div></div>${paStatusPill(st2)}</div>
+      ${photos}
+      <div class="ec-grid">
+        <div class="ec-field"><div class="ec-lbl">Category</div><div class="ec-val st-text">${e.category||'—'}</div></div>
+        <div class="ec-field"><div class="ec-lbl">Pack</div><div class="ec-val st-text">${e.packSize||'—'}</div></div>
+        <div class="ec-field"><div class="ec-lbl">Batch</div><div class="ec-val">${e.batch||'—'}</div></div>
+        <div class="ec-field"><div class="ec-lbl">Expiry</div><div class="ec-val ${expCls}">${e.expiry||'—'}${es==='danger'?' ⚠':es==='warn'?' ⚡':''}</div></div>
+        <div class="ec-field"><div class="ec-lbl">MRP</div><div class="ec-val">${e.mrp?'₹'+parseFloat(e.mrp).toFixed(2):'—'}</div></div>
+        <div class="ec-field"><div class="ec-lbl">Schedule</div><div class="ec-val">${e.schedule}</div></div>
+        <div class="ec-field"><div class="ec-lbl">Marketed By</div><div class="ec-val st-text">${e.marketedBy||'—'}</div></div>
+        <div class="ec-field"><div class="ec-lbl">Mfd For</div><div class="ec-val st-text">${e.mfr||'—'}</div></div>
+        ${e.remark?`<div class="ec-field" style="grid-column:1/-1"><div class="ec-lbl">Remark</div><div class="ec-val st-text">${e.remark}</div></div>`:''}
+      </div>
+      <div class="sys-row">
+        <span class="sys-lbl">PS</span><span class="sys-ps">${ps}</span>
+        <span class="sys-sep">↔</span><span class="sys-lbl">SYS</span>
+        <input class="sys-input" type="number" inputmode="numeric" placeholder="Enter SYS" value="${e.sys}" oninput="setSys(${e.id},this.value)">
+        <span class="sys-diff ${diffCls}" id="diff-${e.id}">${diffStr}</span>
+      </div>
+      <div class="ec-actions">
+        <button class="ec-btn eb-expired" onclick="paSetManual(${e.id},'expired')">⚠ Expired</button>
+        <button class="ec-btn eb-ghost" onclick="paSetManual(${e.id},'ghost')">👻 Phys Only</button>
+        <button class="ec-btn eb-edit" onclick="openPaEdit(${e.id})">✏ Edit</button>
+        <button class="ec-btn eb-del" onclick="confirmPaDelete(${e.id})">✕</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+function setSys(id,val) {
+  const e=paEntries.find(x=>x.id===id);if(!e)return;e.sys=val;
+  const st2=paComputeStatus(e);const card=document.getElementById('ec-'+id);
+  if(card){card.className=`entry-card st-${st2}`;const pEl=card.querySelector('.pill');if(pEl)pEl.outerHTML=paStatusPill(st2);}
+  const ps=parseFloat(e.qty)||0,sys=parseFloat(val)||0;const diff=val!==''?sys-ps:null;
+  const diffStr=diff===null?'—':(diff>0?'+':'')+diff;const diffCls=diff===null?'':diff>0?'pos':diff<0?'neg':'zero';
+  const dEl=document.getElementById('diff-'+id);if(dEl){dEl.textContent=diffStr;dEl.className=`sys-diff ${diffCls}`;}
+  updatePASummary();savePA();
+}
+function paSetManual(id,st) {
+  const e=paEntries.find(x=>x.id===id);if(!e)return;e.status=st;renderReview();updatePASummary();savePA();
+  toast(st==='expired'?`⚠ Expired: ${e.brand}`:`👻 Physical Only: ${e.brand}`);
+}
+function updatePASummary() {
+  let eq=0,hi=0,lo=0,exp=0,ghost=0,pend=0;
+  paEntries.forEach(e=>{const s=paComputeStatus(e);if(s==='eq')eq++;else if(s==='sys-hi')hi++;else if(s==='sys-lo')lo++;else if(s==='expired')exp++;else if(s==='ghost')ghost++;else pend++;});
+  const total=paEntries.length;
+  document.getElementById('ps-all').textContent=total;document.getElementById('ps-eq').textContent=eq;
+  document.getElementById('ps-hi').textContent=hi;document.getElementById('ps-lo').textContent=lo;document.getElementById('ps-exp').textContent=exp;
+  document.getElementById('pa-hdr-n').textContent=total;
+  document.getElementById('pa-prog').style.width=total?((total-pend)/total*100)+'%':'0%';
+  document.getElementById('pa-to-report-btn').disabled=total===0;
+  const paExBtn=document.getElementById('pa-export-btn');if(paExBtn)paExBtn.style.display=total>0?'flex':'none';
+}
+// PA Edit
+function openPaEdit(id) {
+  const e=paEntries.find(x=>x.id===id);if(!e)return;paEditingId=id;
+  ['brand','mol','pack','batch','expiry','mrp','qty','mkt','mfr','remark'].forEach(f=>{const el=document.getElementById('pe-'+f);if(el)el.value=e[f==='mol'?'molecule':f==='mkt'?'marketedBy':f==='mfr'?'mfr':f==='qty'?'qty':f]||'';});
+  document.getElementById('pe-sys').value=e.sys||'';
+  document.getElementById('pe-cat').value=e.category||'';document.getElementById('pe-sch').value=e.schedule||'OTC';
+  document.getElementById('pa-edit-modal').classList.add('open');
+}
+function closePaEdit(){document.getElementById('pa-edit-modal').classList.remove('open');paEditingId=null;}
+function closePaEditIfBg(e){if(e.target===document.getElementById('pa-edit-modal'))closePaEdit();}
+function savePaEdit() {
+  if(!paEditingId)return;const e=paEntries.find(x=>x.id===paEditingId);if(!e)return;
+  const brand=document.getElementById('pe-brand').value.trim();if(!brand){toast('⚠ Brand required');return;}
+  e.brand=brand;e.molecule=document.getElementById('pe-mol').value.trim();e.category=document.getElementById('pe-cat').value;
+  e.packSize=document.getElementById('pe-pack').value.trim();e.batch=document.getElementById('pe-batch').value.trim();
+  e.expiry=document.getElementById('pe-expiry').value.trim();e.mrp=document.getElementById('pe-mrp').value;
+  e.qty=document.getElementById('pe-qty').value;e.sys=document.getElementById('pe-sys').value;
+  e.schedule=document.getElementById('pe-sch').value;e.marketedBy=document.getElementById('pe-mkt').value.trim();
+  e.mfr=document.getElementById('pe-mfr').value.trim();e.remark=document.getElementById('pe-remark').value.trim();
+  e.status='pending';e.edited=true;
+  savePA();closePaEdit();renderReview();updatePASummary();renderQueue();toast(`✓ ${e.brand} updated`);
+}
+function confirmPaDelete(id) {
+  paDeletingId=id||paEditingId;const e=paEntries.find(x=>x.id===paDeletingId);
+  showConfirm('Delete entry?',`"${e?e.brand:'this entry'}" will be removed.`,()=>{
+    paEntries=paEntries.filter(x=>x.id!==paDeletingId);paDeletingId=null;
+    savePA();closePaEdit();renderReview();updatePASummary();renderQueue();toast('Entry removed');
+  });
+}
+// PA Report
+function renderPAReport() {
+  const sheets=[
+    {title:'Sheet 1 — SYS = PS',color:'var(--ok)',filter:e=>paComputeStatus(e)==='eq'},
+    {title:'Sheet 2 — SYS > PS',color:'var(--amber)',filter:e=>paComputeStatus(e)==='sys-hi'},
+    {title:'Sheet 3 — SYS < PS',color:'var(--blue)',filter:e=>paComputeStatus(e)==='sys-lo'},
+    {title:'Sheet 4 — Expired',color:'var(--red)',filter:e=>paComputeStatus(e)==='expired'},
+    {title:'Sheet 5 — Physical Only',color:'var(--muted)',filter:e=>paComputeStatus(e)==='ghost'},
+  ];
+  const cols=['#','Brand','Molecule','Category','Batch','Expiry','PS','SYS','Variance','Marketed By','Mfd For','Auditor','Remark','Edited'];
+  document.getElementById('pa-report-sheets').innerHTML=sheets.map(sh=>{
+    const rows=paEntries.filter(sh.filter);
+    return `<div class="pa-report-sheet">
+      <div class="pa-sheet-hdr" style="background:${sh.color}">
+        <span class="pa-sheet-title">${sh.title}</span>
+        <span class="pa-sheet-count">${rows.length} items</span>
+      </div>
+      <div class="pa-tbl-wrap"><table class="pa-tbl">
+        <thead><tr>${cols.map(c=>`<th>${c}</th>`).join('')}</tr></thead>
+        <tbody>${rows.length===0?`<tr><td colspan="${cols.length}" style="text-align:center;color:var(--muted);padding:0.8rem">No entries</td></tr>`:
+          rows.map((e,i)=>{const ps=parseFloat(e.qty)||0,sys=parseFloat(e.sys)||0;const v=e.sys!==''&&e.qty!==''?sys-ps:'—';
+            return `<tr><td>${i+1}</td><td><strong>${e.brand}</strong></td><td>${e.molecule||'—'}</td><td>${e.category||'—'}</td><td>${e.batch||'—'}</td><td>${e.expiry||'—'}</td><td><strong>${e.qty||'—'}</strong></td><td><strong>${e.sys!==''?e.sys:'—'}</strong></td><td style="font-weight:700;color:${typeof v==='number'&&v>0?'var(--amber)':typeof v==='number'&&v<0?'var(--blue)':'var(--ok)'}">${typeof v==='number'?(v>0?'+':'')+v:v}</td><td>${e.marketedBy||'—'}</td><td>${e.mfr||'—'}</td><td>${e.auditor||'—'}</td><td>${e.remark||'—'}</td><td>${e.edited?'Yes':'No'}</td></tr>`;
+          }).join('')}
+        </tbody>
+      </table></div>
+    </div>`;
+  }).join('');
+  document.getElementById('pa-export-btn').style.display=paEntries.length>0?'flex':'none';
+}
+function paExport() {
+  if(!paEntries.length)return;
+  const today=new Date().toLocaleDateString('en-IN');
+  const sheets=[
+    {name:'SYS=PS',filter:e=>paComputeStatus(e)==='eq'},
+    {name:'SYS>PS',filter:e=>paComputeStatus(e)==='sys-hi'},
+    {name:'SYS<PS',filter:e=>paComputeStatus(e)==='sys-lo'},
+    {name:'Expired',filter:e=>paComputeStatus(e)==='expired'},
+    {name:'Physical Only',filter:e=>paComputeStatus(e)==='ghost'},
+  ];
+  const hdrs=['#','Brand','Molecule','Category','Pack Size','Batch','Expiry','MRP','PS','SYS','Variance','Schedule','Marketed By','Mfd For','Auditor','Remark','Edited','Time'];
+  const wb=XLSX.utils.book_new();
+  const sumData=[['PHARMAUDIT — YAJNA MED SOLUTIONS'],[`Date: ${today}`],[''],['Status','Count'],['Total',paEntries.length],...sheets.map(s=>[s.name,paEntries.filter(s.filter).length]),['Pending',paEntries.filter(e=>paComputeStatus(e)==='pending').length]];
+  const wsS=XLSX.utils.aoa_to_sheet(sumData);wsS['!cols']=[{wch:20},{wch:12}];XLSX.utils.book_append_sheet(wb,wsS,'Summary');
+  sheets.forEach(s=>{
+    const rows=paEntries.filter(s.filter).map((e,i)=>{const ps=parseFloat(e.qty)||0,sys=parseFloat(e.sys)||0;const v=e.sys!==''&&e.qty!==''?sys-ps:'';return[i+1,e.brand,e.molecule,e.category,e.packSize,e.batch,e.expiry,e.mrp?parseFloat(e.mrp):'',ps||'',e.sys!==''?parseFloat(e.sys):'',v,e.schedule,e.marketedBy,e.mfr,e.auditor,e.remark,e.edited?'Yes':'No',e.time];});
+    const ws=XLSX.utils.aoa_to_sheet([hdrs,...rows]);ws['!cols']=[{wch:4},{wch:22},{wch:32},{wch:11},{wch:14},{wch:11},{wch:10},{wch:9},{wch:8},{wch:8},{wch:8},{wch:8},{wch:26},{wch:26},{wch:13},{wch:18},{wch:6},{wch:7}];
+    XLSX.utils.book_append_sheet(wb,ws,s.name);
+  });
+  XLSX.writeFile(wb,`PharmAudit_${new Date().toISOString().slice(0,10)}.xlsx`);toast('📊 5-Sheet Excel exported!');
+}
+
+// ══════════════════════════════════════════════════════
+//  SHARED UTILITIES
+// ══════════════════════════════════════════════════════
+function showConfirm(title,sub,onOk) {
+  document.getElementById('confirm-title').textContent=title;
+  document.getElementById('confirm-sub').textContent=sub;
+  document.getElementById('confirm-ok-btn').onclick=()=>{closeConfirm();onOk();};
+  document.getElementById('confirm-modal').classList.add('open');
+}
+function closeConfirm(){document.getElementById('confirm-modal').classList.remove('open');}
+document.getElementById('confirm-modal').addEventListener('click',e=>{if(e.target===document.getElementById('confirm-modal'))closeConfirm();});
+function openLB(src){document.getElementById('lb-img').src=src;document.getElementById('lightbox').classList.add('open');}
+function closeLB(){document.getElementById('lightbox').classList.remove('open');}
+document.getElementById('lightbox').addEventListener('click',e=>{if(e.target===document.getElementById('lightbox'))closeLB();});
+document.getElementById('lb-close').addEventListener('click',closeLB);
+function toast(msg){const el=document.getElementById('toast');el.textContent=msg;el.classList.add('show');clearTimeout(el._t);el._t=setTimeout(()=>el.classList.remove('show'),2600);}
+
+// init PA summary
+updatePASummary();
+
+// ══════════════════════════════════════════════════════
+//  AUDIT TOOL
+// ══════════════════════════════════════════════════════
+
+// Firebase config for the Audit Tool's real-time multi-device sync.
+// Replace the placeholders below with your project's web config (Firebase console → Project settings → Your apps).
+// This web config is NOT secret — security comes from database.rules.json + Anonymous Auth (see README/DEPLOY.md).
+const AT_FB_CONFIG = {
+  apiKey: "AIzaSyBLXU9GFpI97BSA1j4yNNdoBb01zF9pJsI",
+  authDomain: "yagna-841ec.firebaseapp.com",
+  databaseURL: "https://yagna-841ec-default-rtdb.asia-southeast1.firebasedatabase.app",
+  projectId: "yagna-841ec",
+  storageBucket: "yagna-841ec.firebasestorage.app",
+  messagingSenderId: "993144485532",
+  appId: "1:993144485532:web:99fd36bef468e9bdfadf59"
+};
+
+let atFBApp = null;
+let atFBDB = null;
+let atFBReady = false;
+
+// Audit state
+let atInventory = [];        // full inventory from upload
+let atSession = null;        // { code, hospital, date, createdAt }
+let atRole = null;           // 'reviewer' | 'auditor'
+let atAuditorName = '';
+let atEntries = {};          // { entryId: { brand, batch, sys, ps, auditor, time, ... } }
+let atAuditors = {};         // { name: { count, lastSeen } }
+let atMyEntries = [];        // local auditor's entries
+let atMyCount = 0;
+let atSelectedBrand = null;
+let atFBListeners = [];
+
+// ── INIT FIREBASE ──
+function atInitFirebase() {
+  if (atFBReady) return;
+  try {
+    if (typeof firebase === 'undefined') {
+      atFBReady = false;
+      atSetFBStatus('disconnected', 'Firebase not loaded');
+      return;
+    }
+    if (!firebase.apps.length) {
+      atFBApp = firebase.initializeApp(AT_FB_CONFIG, 'audit-app');
+    } else {
+      atFBApp = firebase.apps.find(a => a.name === 'audit-app') || firebase.initializeApp(AT_FB_CONFIG, 'audit-app');
+    }
+    atFBDB = firebase.database(atFBApp);
+    // Security rules require an authenticated user. Sign in anonymously before any read/write,
+    // and only mark Firebase ready once auth resolves (otherwise every write is permission-denied).
+    atSetFBStatus('connecting', 'Connecting...');
+    atFBApp.auth().signInAnonymously()
+      .then(() => { atFBReady = true; atSetFBStatus('connected', 'Firebase ready'); })
+      .catch(err => { atFBReady = false; atSetFBStatus('disconnected', 'Sign-in failed'); console.warn('Anonymous auth failed:', err.message); });
+  } catch(e) {
+    atFBReady = false;
+    atSetFBStatus('disconnected', 'Firebase config needed');
+    console.warn('Firebase init failed:', e.message);
+  }
+}
+function atSetFBStatus(state, label) {
+  const dot = document.getElementById('at-fb-dot');
+  const lbl = document.getElementById('at-fb-label');
+  if (dot) { dot.className = 'fb-dot ' + state; }
+  if (lbl) lbl.textContent = label;
+}
+
+// ── NAVIGATION ──
+function atStartReviewer() {
+  atRole = 'reviewer';
+  document.getElementById('at-role-screen').style.display = 'none';
+  document.getElementById('at-reviewer-wrap').style.display = 'block';
+  document.getElementById('at-rev-setup').style.display = 'block';
+  document.getElementById('at-rev-session').style.display = 'none';
+  document.getElementById('at-date').value = new Date().toISOString().slice(0,10);
+  atInitFirebase();
+}
+function atShowJoin() {
+  atRole = 'auditor';
+  document.getElementById('at-role-screen').style.display = 'none';
+  document.getElementById('at-auditor-wrap').style.display = 'block';
+  document.getElementById('at-join-screen').style.display = 'block';
+  document.getElementById('at-count-screen').style.display = 'none';
+  atInitFirebase();
+}
+function atRevTab(t) {
+  ['setup','live','report'].forEach(n => {
+    const el = document.getElementById('at-rev-' + n);
+    if (el) el.style.display = n===t ? 'block' : 'none';
+    const btn = document.getElementById('at-rt-' + n);
+    if (btn) btn.classList.toggle('active', n===t);
+  });
+  if (t === 'live') atRenderLive();
+  if (t === 'report') atRenderReport();
+}
+function atBackToRole() {
+  atRole = null;
+  document.getElementById('at-role-screen').style.display = 'flex';
+  document.getElementById('at-reviewer-wrap').style.display = 'none';
+  document.getElementById('at-auditor-wrap').style.display = 'none';
+  atDetachListeners();
+}
+
+// ── INVENTORY UPLOAD ──
+function atInvDrop(e) { e.preventDefault(); e.target.classList.remove('drag'); const f=e.dataTransfer.files[0]; if(f) atParseInventory(f); }
+function atLoadInventory(e) { const f=e.target.files[0]; e.target.value=''; if(f) atParseInventory(f); }
+function atParseInventory(file) {
+  const status = document.getElementById('at-inv-status');
+  status.style.display = 'block';
+  status.innerHTML = '<div class="ai-bar loading" style="display:flex"><div class="spinner"></div><span>Reading inventory...</span></div>';
+  const reader = new FileReader();
+  reader.onload = ev => {
+    try {
+      let rows = [];
+      if (file.name.endsWith('.csv')) {
+        const lines = ev.target.result.split('\n').map(l=>l.split(',').map(c=>c.trim().replace(/^"|"$/g,'')));
+        const hdrs = lines[0].map(h=>h.toLowerCase().trim());
+        for (let i=1;i<lines.length;i++) { if(!lines[i][0]) continue; const r={}; hdrs.forEach((h,j)=>r[h]=lines[i][j]||''); rows.push(r); }
+      } else {
+        const wb = XLSX.read(new Uint8Array(ev.target.result),{type:'array'});
+        const ws = wb.Sheets[wb.SheetNames[0]];
+        rows = XLSX.utils.sheet_to_json(ws,{defval:''});
+        rows = rows.map(r=>{const o={};Object.keys(r).forEach(k=>o[k.toLowerCase().trim()]=String(r[k]||''));return o;});
+      }
+      // Flexible column detection
+      const brandCol = ['item name','brand name','brand','name','item_name','drug name'].find(c=>rows[0]&&c in rows[0]);
+      const batchCol = ['batch no','batch','batch number','lot no','lot number','batch_no'].find(c=>rows[0]&&c in rows[0]);
+      const sysCol   = ['system stock','sys stock','sys qty','quantity','qty','closing stock','stock qty','current stock'].find(c=>rows[0]&&c in rows[0]);
+      const mrpCol   = ['mrp','price','rate','unit price'].find(c=>rows[0]&&c in rows[0]);
+      const expiryCol= ['expiry','expiry date','exp date','exp','expiry_date'].find(c=>rows[0]&&c in rows[0]);
+      if (!brandCol) { status.innerHTML='<div class="ai-bar error" style="display:flex"><span>⚠ No brand name column found. Expected "Item Name" or "Brand Name".</span></div>'; return; }
+      atInventory = rows.filter(r=>r[brandCol]).map((r,i) => ({
+        id: 'inv_'+i,
+        brand: (r[brandCol]||'').trim().toUpperCase(),
+        batch: (r[batchCol]||r['batch']||'—').trim(),
+        sys:   parseFloat(r[sysCol]||r['qty']||0)||0,
+        mrp:   parseFloat(r[mrpCol]||0)||0,
+        expiry:(r[expiryCol]||'').trim(),
+        counted: false,
+      }));
+      const brands = new Set(atInventory.map(i=>i.brand));
+      const expiring = atInventory.filter(i => { const s=expiryStatus(i.expiry); return s==='warn'||s==='danger'; }).length;
+      document.getElementById('at-inv-total').textContent = atInventory.length;
+      document.getElementById('at-inv-brands').textContent = brands.size;
+      document.getElementById('at-inv-batches').textContent = atInventory.length;
+      document.getElementById('at-inv-expiring').textContent = expiring;
+      document.getElementById('at-inv-preview').style.display = 'block';
+      document.getElementById('at-create-session-btn').disabled = false;
+      status.innerHTML = '<div class="ai-bar success" style="display:flex"><span>✓ ' + atInventory.length + ' items loaded from ' + brands.size + ' brands</span></div>';
+      setTimeout(()=>{status.style.display='none';},3000);
+    } catch(err) {
+      status.innerHTML = '<div class="ai-bar error" style="display:flex"><span>⚠ '+err.message+'</span></div>';
+    }
+  };
+  if (file.name.endsWith('.csv')) reader.readAsText(file);
+  else reader.readAsArrayBuffer(file);
+}
+
+// ── CREATE SESSION ──
+function atGenerateCode() {
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  return Array.from({length:6}, ()=>chars[Math.floor(Math.random()*chars.length)]).join('');
+}
+function atCreateSession() {
+  const hospital = document.getElementById('at-hospital').value.trim() || 'Unknown Hospital';
+  const date = document.getElementById('at-date').value || new Date().toISOString().slice(0,10);
+  if (!atInventory.length) { toast('⚠ Upload inventory first'); return; }
+  const code = atGenerateCode();
+  atSession = { code, hospital, date, createdAt: Date.now() };
+  atEntries = {}; atAuditors = {};
+  document.getElementById('at-session-code').textContent = code;
+  document.getElementById('at-session-hospital').textContent = hospital + ' · ' + date;
+  document.getElementById('at-rev-setup').style.display = 'none';
+  document.getElementById('at-rev-session').style.display = 'block';
+  // Push to Firebase
+  if (atFBReady) {
+    const sessionRef = atFBDB.ref('audit_sessions/' + code);
+    sessionRef.set({
+      hospital, date, createdAt: atSession.createdAt,
+      inventory: atInventory,
+      status: 'active'
+    });
+    atFBDB.ref('.info/connected').on('value', snap => {
+      atSetFBStatus(snap.val() ? 'connected' : 'disconnected', snap.val() ? 'Live — ' + code : 'Reconnecting...');
+    });
+    atListenAsReviewer(code);
+  } else {
+    atSetFBStatus('disconnected', 'Offline mode — ' + code);
+  }
+  toast('✓ Session ' + code + ' created!');
+  setTimeout(() => atRevTab('live'), 1200);
+}
+
+// ── FIREBASE LISTENERS (REVIEWER) ──
+function atListenAsReviewer(code) {
+  if (!atFBReady) return;
+  const entriesRef = atFBDB.ref('audit_sessions/' + code + '/entries');
+  const audRef = atFBDB.ref('audit_sessions/' + code + '/auditors');
+  const el = entriesRef.on('value', snap => {
+    atEntries = snap.val() || {};
+    // mark inventory items as counted
+    Object.values(atEntries).forEach(e => {
+      const inv = atInventory.find(i=>i.brand===e.brand && i.batch===e.batch);
+      if (inv) inv.counted = true;
+    });
+    if (document.getElementById('at-rev-live') && document.getElementById('at-rev-live').style.display !== 'none') atRenderLive();
+  });
+  const al = audRef.on('value', snap => {
+    atAuditors = snap.val() || {};
+    atRenderAuditors();
+    const names = Object.keys(atAuditors);
+    document.getElementById('at-zone-assign-wrap').style.display = names.length > 0 ? 'block' : 'none';
+    atRenderZoneAssign();
+  });
+  atFBListeners.push({ref: entriesRef, ev: 'value', fn: el});
+  atFBListeners.push({ref: audRef, ev: 'value', fn: al});
+}
+function atDetachListeners() {
+  atFBListeners.forEach(l => l.ref.off(l.ev, l.fn));
+  atFBListeners = [];
+}
+
+// ── REVIEWER: LIVE TAB ──
+function atRenderLive() {
+  const total = atInventory.length;
+  const counted = Object.keys(atEntries).length;
+  const disc = Object.values(atEntries).filter(e=>parseFloat(e.ps)!==parseFloat(e.sys)).length;
+  const pct = total ? Math.round(counted/total*100) : 0;
+  document.getElementById('at-live-total').textContent = total;
+  document.getElementById('at-live-counted').textContent = counted;
+  document.getElementById('at-live-disc').textContent = disc;
+  document.getElementById('at-live-pct').textContent = pct + '%';
+  document.getElementById('at-live-prog').style.width = pct + '%';
+  atRenderAuditors();
+  // Recent entries (last 8)
+  const recent = Object.values(atEntries).sort((a,b)=>b.time-a.time).slice(0,8);
+  const el = document.getElementById('at-live-entries');
+  if (!recent.length) { el.innerHTML='<div class="empty"><span class="ei">⏳</span><p>Waiting for entries...</p></div>'; return; }
+  el.innerHTML = recent.map(e => {
+    const ps=parseFloat(e.ps)||0, sys=parseFloat(e.sys)||0, diff=ps-sys;
+    const diffStr=(diff>0?'+':'')+diff; const diffCls=diff>0?'neg':diff<0?'pos':'zero';
+    const matched = diff===0;
+    return `<div class="at-item-row ${matched?'counted':diff!==0?'discrepancy':''}">
+      <div class="at-item-top">
+        <div><div class="at-item-brand">${e.brand}</div><div class="at-item-batch">Batch: ${e.batch}</div></div>
+        <span class="pill ${matched?'pill-ok':'pill-warn'}">${matched?'✓ Match':'⚠ Diff'}</span>
+      </div>
+      <div style="display:flex;gap:0.5rem;font-size:0.72rem;color:var(--muted);flex-wrap:wrap">
+        <span>SYS: <strong>${sys}</strong></span>
+        <span>PS: <strong>${ps}</strong></span>
+        <span class="at-variance ${diffCls}">${diffStr}</span>
+        <span style="margin-left:auto">${e.auditorName||'—'} · ${new Date(e.time).toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'})}</span>
+      </div>
+    </div>`;
+  }).join('');
+}
+function atRenderAuditors() {
+  const el = document.getElementById('at-auditor-list');
+  const names = Object.keys(atAuditors);
+  if (!names.length) { el.innerHTML='<div class="empty"><span class="ei">🧑‍⚕️</span><p>Waiting for auditors to join...</p></div>'; return; }
+  el.innerHTML = names.map(name => {
+    const a = atAuditors[name];
+    const myEntries = Object.values(atEntries).filter(e=>e.auditorName===name);
+    const last = a.lastSeen ? new Date(a.lastSeen).toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'}) : '—';
+    return `<div class="auditor-row">
+      <div><div class="auditor-name">🧑‍⚕️ ${name}</div><div class="auditor-meta">Last active: ${last}</div></div>
+      <div class="auditor-count">${myEntries.length} items</div>
+    </div>`;
+  }).join('');
+}
+function atRenderZoneAssign() {
+  const names = Object.keys(atAuditors);
+  if (!names.length) return;
+  const el = document.getElementById('at-zone-list');
+  const brands = [...new Set(atInventory.map(i=>i.brand))].sort();
+  const ZONES = ['Zone A','Zone B','Zone C','Zone D','Zone E'];
+  el.innerHTML = names.map((name,i) => {
+    const zone = atAuditors[name].zone || 'Unassigned';
+    return `<div class="auditor-row">
+      <div><div class="auditor-name">${name}</div></div>
+      <select style="background:var(--bg);border:1px solid var(--border);border-radius:7px;padding:0.3rem 0.5rem;font-size:0.78rem;font-family:'Space Grotesk',sans-serif" onchange="atAssignZone('${name}',this.value)">
+        <option value="">Unassigned</option>
+        ${ZONES.map(z=>`<option value="${z}" ${zone===z?'selected':''}>${z}</option>`).join('')}
+      </select>
+    </div>`;
+  }).join('');
+}
+function atAssignZone(auditorName, zone) {
+  if (!atFBReady || !atSession) return;
+  atFBDB.ref('audit_sessions/'+atSession.code+'/auditors/'+auditorName+'/zone').set(zone);
+  toast('✓ ' + auditorName + ' assigned to ' + (zone||'no zone'));
+}
+
+// ── JOIN SESSION (AUDITOR) ──
+async function atJoinSession() {
+  const name = document.getElementById('at-auditor-name').value.trim();
+  const code = document.getElementById('at-session-code-input').value.trim().toUpperCase();
+  if (!name) { toast('⚠ Enter your name'); return; }
+  if (code.length !== 6) { toast('⚠ Enter 6-character session code'); return; }
+  const bar = document.getElementById('at-join-bar');
+  bar.className='ai-bar loading'; bar.style.display='flex';
+  document.getElementById('at-join-spin').style.display='block';
+  document.getElementById('at-join-msg').textContent='Joining session...';
+  if (!atFBReady) {
+    bar.className='ai-bar error'; bar.style.display='flex';
+    document.getElementById('at-join-spin').style.display='none';
+    document.getElementById('at-join-msg').textContent='⚠ Firebase not connected — check config';
+    return;
+  }
+  try {
+    const snap = await atFBDB.ref('audit_sessions/'+code).once('value');
+    const session = snap.val();
+    if (!session) { bar.className='ai-bar error'; bar.style.display='flex'; document.getElementById('at-join-spin').style.display='none'; document.getElementById('at-join-msg').textContent='⚠ Session not found — check code'; return; }
+    if (session.status === 'closed') { bar.className='ai-bar error'; bar.style.display='flex'; document.getElementById('at-join-spin').style.display='none'; document.getElementById('at-join-msg').textContent='⚠ This session is closed'; return; }
+    atSession = { code, hospital: session.hospital, date: session.date };
+    atInventory = session.inventory || [];
+    atAuditorName = name;
+    atMyCount = 0; atMyEntries = [];
+    // Register auditor
+    atFBDB.ref('audit_sessions/'+code+'/auditors/'+name).set({ joinedAt: Date.now(), lastSeen: Date.now(), count: 0 });
+    // Listen for entries
+    atListenAsAuditor(code, name);
+    // Listen for zone assignment
+    atFBDB.ref('audit_sessions/'+code+'/auditors/'+name+'/zone').on('value', snap => {
+      const zone = snap.val();
+      const zoneInfo = document.getElementById('at-zone-info');
+      if (zone) { zoneInfo.style.display='block'; zoneInfo.textContent='📍 Your zone: ' + zone; }
+      else zoneInfo.style.display='none';
+    });
+    bar.style.display='none';
+    document.getElementById('at-join-screen').style.display='none';
+    document.getElementById('at-count-screen').style.display='block';
+    document.getElementById('at-aud-session-info').textContent = session.hospital + ' · ' + code;
+    document.getElementById('at-aud-name-display').textContent = name;
+    toast('✓ Joined session ' + code);
+  } catch(err) {
+    bar.className='ai-bar error'; bar.style.display='flex';
+    document.getElementById('at-join-spin').style.display='none';
+    document.getElementById('at-join-msg').textContent='⚠ ' + err.message;
+  }
+}
+function atListenAsAuditor(code, name) {
+  const ref = atFBDB.ref('audit_sessions/'+code+'/entries');
+  ref.on('value', snap => {
+    const all = snap.val() || {};
+    // Mark inventory items as counted
+    atInventory.forEach(i => {
+      i.counted = !!Object.values(all).find(e => e.brand===i.brand && e.batch===i.batch);
+    });
+    // My entries
+    atMyEntries = Object.values(all).filter(e => e.auditorName === name);
+    atMyCount = atMyEntries.length;
+    document.getElementById('at-aud-count-display').textContent = atMyCount + ' counted';
+    document.getElementById('at-my-count').textContent = atMyCount;
+    atRenderMyEntries();
+  });
+  atFBListeners.push({ref, ev:'value', fn: ()=>{}});
+}
+
+// ── AUDITOR: SEARCH ──
+function atSearchBrand(q) {
+  const results = document.getElementById('at-search-results');
+  if (!q || q.length < 2) { results.style.display='none'; return; }
+  const qu = q.toUpperCase();
+  // Fuzzy: brand contains query string
+  const brands = [...new Set(atInventory.map(i=>i.brand))]
+    .filter(b => b.includes(qu) || atFuzzy(b, qu))
+    .slice(0, 12);
+  if (!brands.length) { results.style.display='none'; return; }
+  results.style.display='block';
+  results.innerHTML = brands.map(brand => {
+    const batches = atInventory.filter(i=>i.brand===brand);
+    const countedAll = batches.every(i=>i.counted);
+    const countedSome = batches.some(i=>i.counted);
+    return `<div class="at-search-item" onclick="atSelectBrand('${brand.replace(/'/g,"\'")}')">
+      <div>
+        <div class="at-search-brand">${brand}</div>
+        <div class="at-search-meta">${batches.length} batch${batches.length>1?'es':''}</div>
+      </div>
+      ${countedAll?'<span class="at-search-done">✓ Done</span>':countedSome?'<span class="pill pill-warn" style="font-size:0.58rem">Partial</span>':''}
+    </div>`;
+  }).join('');
+}
+function atFuzzy(str, query) {
+  // Simple: all chars of query appear in order in str
+  let si=0;
+  for (let i=0;i<str.length&&si<query.length;i++) if(str[i]===query[si])si++;
+  return si===query.length;
+}
+function atSelectBrand(brand) {
+  atSelectedBrand = brand;
+  document.getElementById('at-brand-search').value = brand;
+  document.getElementById('at-search-results').style.display='none';
+  document.getElementById('at-selected-brand-label').textContent = brand;
+  document.getElementById('at-selected-batches').style.display='block';
+  atRenderBatches(brand);
+}
+function atRenderBatches(brand) {
+  const batches = atInventory.filter(i=>i.brand===brand);
+  const el = document.getElementById('at-batch-list');
+  el.innerHTML = batches.map(item => {
+    const existing = atMyEntries.find(e=>e.brand===brand && e.batch===item.batch);
+    const expSt = expiryStatus(item.expiry);
+    const expCls = expSt==='danger'?'exp-danger':expSt==='warn'?'exp-warn':'';
+    return `<div class="at-item-row ${item.counted?'counted':''}" id="atb-${item.id}">
+      <div class="at-item-top">
+        <div>
+          <div class="at-item-brand" style="font-size:0.82rem">${item.batch}</div>
+          <div class="at-item-batch">SYS: <strong>${item.sys}</strong> · Expiry: <span class="${expCls}">${item.expiry||'—'}</span></div>
+        </div>
+        ${item.counted?'<span class="pill pill-ok">✓ Counted</span>':'<span class="pill pill-muted">Pending</span>'}
+      </div>
+      ${existing ? `<div style="font-size:0.72rem;color:var(--ok);padding:0.2rem 0">✓ You entered: <strong>${existing.ps}</strong> — <span style="color:var(--muted)">${existing.ps==existing.sys?'Matched':'Variance: '+(existing.ps-existing.sys)}</span></div>` : `
+      <div class="at-count-row">
+        <div style="font-size:0.62rem;font-weight:700;color:var(--muted);flex-shrink:0">SYS</div>
+        <div class="at-sys-val">${item.sys}</div>
+        <div style="font-size:0.62rem;font-weight:700;color:var(--muted);flex-shrink:0">PS</div>
+        <input class="at-ps-input" type="number" inputmode="numeric" placeholder="0" id="atps-${item.id}" oninput="atLiveVariance('${item.id}',${item.sys},this.value)">
+        <div class="at-variance" id="atdiff-${item.id}">—</div>
+        <button class="at-submit-btn" onclick="atSubmitEntry('${item.id}','${brand.replace(/'/g,"\'")}','${item.batch}',${item.sys},${item.mrp},'${item.expiry}')">✓</button>
+      </div>`}
+    </div>`;
+  }).join('');
+}
+function atLiveVariance(id, sys, val) {
+  const diff = parseFloat(val) - sys;
+  const el = document.getElementById('atdiff-'+id);
+  if (!el || val==='') { if(el) el.textContent='—'; return; }
+  el.textContent = (diff>0?'+':'')+diff;
+  el.className = 'at-variance ' + (diff>0?'neg':diff<0?'pos':'zero');
+}
+function atSubmitEntry(invId, brand, batch, sys, mrp, expiry) {
+  const psEl = document.getElementById('atps-'+invId);
+  if (!psEl || psEl.value==='') { toast('⚠ Enter physical stock'); psEl && psEl.focus(); return; }
+  const ps = parseFloat(psEl.value);
+  const entry = {
+    brand, batch, sys, ps,
+    mrp, expiry,
+    variance: ps - sys,
+    varianceValue: Math.abs(ps - sys) * (mrp||0),
+    auditorName: atAuditorName,
+    time: Date.now(),
+    invId
+  };
+  if (atFBReady && atSession) {
+    const key = atSession.code + '_' + invId + '_' + atAuditorName.replace(/ /g,'_');
+    atFBDB.ref('audit_sessions/'+atSession.code+'/entries/'+key).set(entry);
+    atFBDB.ref('audit_sessions/'+atSession.code+'/auditors/'+atAuditorName).update({ lastSeen: Date.now(), count: atMyCount+1 });
+  } else {
+    // Local fallback
+    atEntries[invId] = entry;
+    atMyEntries.push(entry); atMyCount++;
+    document.getElementById('at-aud-count-display').textContent = atMyCount + ' counted';
+    document.getElementById('at-my-count').textContent = atMyCount;
+    atRenderMyEntries();
+  }
+  // Mark local inventory item
+  const inv = atInventory.find(i=>i.id===invId);
+  if (inv) { inv.counted = true; }
+  atRenderBatches(brand);
+  toast('✓ ' + brand + ' / ' + batch + ' submitted');
+}
+function atRenderMyEntries() {
+  const el = document.getElementById('at-my-entries');
+  const entries = atMyEntries.slice().reverse().slice(0,15);
+  if (!entries.length) { el.innerHTML='<div class="empty" style="padding:1rem"><span class="ei" style="font-size:1.5rem">📋</span><p>No entries yet</p></div>'; return; }
+  el.innerHTML = entries.map(e => {
+    const diff = e.ps - e.sys;
+    const diffStr = (diff>0?'+':'')+diff;
+    const matched = diff===0;
+    return `<div class="at-item-row ${matched?'counted':'discrepancy'}" style="margin-bottom:0.3rem">
+      <div class="at-item-top" style="margin-bottom:0.2rem">
+        <div><div class="at-item-brand" style="font-size:0.8rem">${e.brand}</div><div class="at-item-batch">Batch: ${e.batch}</div></div>
+        <span class="pill ${matched?'pill-ok':'pill-warn'}">${matched?'✓':'⚠ '+diffStr}</span>
+      </div>
+      <div style="font-size:0.68rem;color:var(--muted)">SYS ${e.sys} → PS ${e.ps} · ${new Date(e.time).toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'})}</div>
+    </div>`;
+  }).join('');
+}
+
+// ── REVIEWER: REPORT ──
+function atRenderReport() {
+  const all = Object.values(atEntries);
+  const total = atInventory.length;
+  const counted = all.length;
+  const uncounted = atInventory.filter(i=>!i.counted);
+  const disc = all.filter(e=>parseFloat(e.ps)!==parseFloat(e.sys));
+  const matched = all.filter(e=>parseFloat(e.ps)===parseFloat(e.sys));
+  const expFlags = all.filter(e=>{ const s=expiryStatus(e.expiry); return s==='warn'||s==='danger'; });
+  // Auditor summary
+  const auditorMap = {};
+  all.forEach(e => {
+    if (!auditorMap[e.auditorName]) auditorMap[e.auditorName] = [];
+    auditorMap[e.auditorName].push(e);
+  });
+  const sheets = [
+    { title:'Full Audit', color:'var(--accent)', items: all, cols:['Brand','Batch','SYS','PS','Variance','Variance ₹','Expiry','Auditor','Time'] },
+    { title:'Discrepancies', color:'var(--amber)', items: disc, cols:['Brand','Batch','SYS','PS','Variance','Variance ₹','Auditor','Time'] },
+    { title:'Expiry Flags', color:'var(--red)', items: expFlags, cols:['Brand','Batch','Expiry','SYS','PS','Auditor'] },
+    { title:'Uncounted Items', color:'var(--muted)', items: uncounted.map(i=>({brand:i.brand,batch:i.batch,sys:i.sys,ps:'—',expiry:i.expiry,auditorName:'—',time:0})), cols:['Brand','Batch','SYS','Expiry'] },
+  ];
+  document.getElementById('at-report-sheets').innerHTML = sheets.map(sh => `
+    <div class="at-report-section">
+      <div class="at-report-hdr" style="background:${sh.color}">
+        <span class="at-report-hdr-title">${sh.title}</span>
+        <span class="at-report-hdr-count">${sh.items.length} items</span>
+      </div>
+      <div class="pa-tbl-wrap"><table class="pa-tbl">
+        <thead><tr>${sh.cols.map(c=>`<th>${c}</th>`).join('')}</tr></thead>
+        <tbody>${sh.items.length===0?`<tr><td colspan="${sh.cols.length}" style="text-align:center;color:var(--muted);padding:0.8rem">No entries</td></tr>`:
+          sh.items.slice(0,30).map((e,i)=>{
+            const diff=(e.ps!=='—'&&e.sys!==undefined)?parseFloat(e.ps)-parseFloat(e.sys):null;
+            const diffStr=diff===null?'—':(diff>0?'+':'')+diff;
+            const diffColor=diff===null?'':diff>0?'color:var(--amber)':diff<0?'color:var(--blue)':'color:var(--ok)';
+            const t=e.time?new Date(e.time).toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'}):'—';
+            if(sh.title==='Full Audit'||sh.title==='Discrepancies')
+              return `<tr><td><strong>${e.brand}</strong></td><td>${e.batch}</td><td>${e.sys}</td><td><strong>${e.ps}</strong></td><td style="font-weight:700;${diffColor}">${diffStr}</td><td>${e.varianceValue?'₹'+parseFloat(e.varianceValue).toFixed(0):'—'}</td>${sh.title==='Full Audit'?`<td>${e.expiry||'—'}</td>`:''}<td>${e.auditorName||'—'}</td><td>${t}</td></tr>`;
+            if(sh.title==='Expiry Flags')
+              return `<tr><td><strong>${e.brand}</strong></td><td>${e.batch}</td><td>${e.expiry}</td><td>${e.sys}</td><td>${e.ps}</td><td>${e.auditorName||'—'}</td></tr>`;
+            return `<tr><td><strong>${e.brand}</strong></td><td>${e.batch}</td><td>${e.sys}</td><td>${e.expiry||'—'}</td></tr>`;
+          }).join('')}
+        </tbody>
+      </table></div>
+    </div>`).join('') +
+    // Auditor summary card
+    `<div class="at-report-section">
+      <div class="at-report-hdr" style="background:var(--accent2)">
+        <span class="at-report-hdr-title">Auditor Summary</span>
+        <span class="at-report-hdr-count">${Object.keys(auditorMap).length} auditors</span>
+      </div>
+      <div style="padding:0.7rem">
+        ${Object.keys(auditorMap).map(name=>{
+          const items=auditorMap[name];const discN=items.filter(e=>parseFloat(e.ps)!==parseFloat(e.sys)).length;
+          const times=items.map(e=>e.time).sort();const dur=times.length>1?Math.round((times[times.length-1]-times[0])/60000)+' min':'—';
+          return `<div class="auditor-row"><div><div class="auditor-name">🧑‍⚕️ ${name}</div><div class="auditor-meta">${discN} discrepancies · Duration: ${dur}</div></div><div class="auditor-count">${items.length} items</div></div>`;
+        }).join('')}
+      </div>
+    </div>`;
+  document.getElementById('at-export-btn').style.display = all.length > 0 ? 'flex' : 'none';
+}
+
+// ── EXPORT ──
+function atExport() {
+  const all = Object.values(atEntries);
+  if (!all.length && !atInventory.length) { toast('⚠ No data to export'); return; }
+  const wb = XLSX.utils.book_new();
+  const hospital = atSession ? atSession.hospital : 'Audit';
+  const date = atSession ? atSession.date : new Date().toISOString().slice(0,10);
+  // Sheet 1 — Full Audit
+  const h1=['Brand','Batch','System Stock','Physical Stock','Variance','Variance ₹','Expiry','Schedule','Auditor','Time'];
+  const r1=all.map(e=>[e.brand,e.batch,e.sys,e.ps,parseFloat(e.ps)-parseFloat(e.sys),e.varianceValue?parseFloat(e.varianceValue).toFixed(0):'',e.expiry||'',e.schedule||'',e.auditorName,new Date(e.time).toLocaleString('en-IN')]);
+  const ws1=XLSX.utils.aoa_to_sheet([h1,...r1]);ws1['!cols']=[{wch:24},{wch:12},{wch:10},{wch:10},{wch:9},{wch:10},{wch:11},{wch:9},{wch:16},{wch:16}];
+  XLSX.utils.book_append_sheet(wb,ws1,'Full Audit');
+  // Sheet 2 — Discrepancies
+  const disc=all.filter(e=>parseFloat(e.ps)!==parseFloat(e.sys));
+  const h2=['Brand','Batch','System Stock','Physical Stock','Variance','Variance ₹','Auditor'];
+  const r2=disc.map(e=>[e.brand,e.batch,e.sys,e.ps,parseFloat(e.ps)-parseFloat(e.sys),e.varianceValue?parseFloat(e.varianceValue).toFixed(0):'',e.auditorName]);
+  const ws2=XLSX.utils.aoa_to_sheet([h2,...r2]);
+  XLSX.utils.book_append_sheet(wb,ws2,'Discrepancies');
+  // Sheet 3 — Auditor Summary
+  const auditorMap={};
+  all.forEach(e=>{if(!auditorMap[e.auditorName])auditorMap[e.auditorName]=[];auditorMap[e.auditorName].push(e);});
+  const h3=['Auditor','Items Counted','Discrepancies','Matched','Duration (min)'];
+  const r3=Object.keys(auditorMap).map(name=>{
+    const items=auditorMap[name];const times=items.map(e=>e.time).sort();
+    return[name,items.length,items.filter(e=>parseFloat(e.ps)!==parseFloat(e.sys)).length,items.filter(e=>parseFloat(e.ps)===parseFloat(e.sys)).length,times.length>1?Math.round((times[times.length-1]-times[0])/60000):'—'];
+  });
+  const ws3=XLSX.utils.aoa_to_sheet([h3,...r3]);
+  XLSX.utils.book_append_sheet(wb,ws3,'Auditor Summary');
+  // Sheet 4 — Expiry Flags
+  const expF=all.filter(e=>{const s=expiryStatus(e.expiry);return s==='warn'||s==='danger';});
+  const h4=['Brand','Batch','Expiry','SYS','PS','Auditor'];
+  const r4=expF.map(e=>[e.brand,e.batch,e.expiry,e.sys,e.ps,e.auditorName]);
+  const ws4=XLSX.utils.aoa_to_sheet([h4,...r4]);
+  XLSX.utils.book_append_sheet(wb,ws4,'Expiry Flags');
+  XLSX.writeFile(wb,`StockAudit_${hospital.replace(/ /g,'_')}_${date}.xlsx`);
+  toast('📊 4-Sheet Excel exported!');
+}
+
+// ── CLOSE SESSION ──
+function atCloseSession() {
+  showConfirm('Close session?','This will end the audit session. Auditors will not be able to add entries.',()=>{
+    if(atFBReady && atSession) atFBDB.ref('audit_sessions/'+atSession.code+'/status').set('closed');
+    atDetachListeners();
+    atSession=null;atInventory=[];atEntries={};atAuditors={};atRole=null;
+    document.getElementById('at-rev-session').style.display='none';
+    document.getElementById('at-reviewer-wrap').style.display='none';
+    document.getElementById('at-role-screen').style.display='flex';
+    toast('✓ Session closed');
+  });
+}
+
+// ── HOME CARD UPDATE ──
+const _origUpdateHomeStats = updateHomeStats;
+function updateHomeStats() {
+  _origUpdateHomeStats();
+}
+
+</script>
+</body>
+</html>
