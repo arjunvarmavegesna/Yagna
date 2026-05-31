@@ -324,6 +324,7 @@ table.data-tbl tr:hover td{background:var(--bg)}
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-storage-compat.js"></script>
 </head>
 <body>
 
@@ -1074,8 +1075,34 @@ function paSyncEntry(e){
   const key = paEntryKey(e);
   try {
     const clean = JSON.parse(JSON.stringify(e)); // strip undefined / non-serialisable
+    // Never sync base64 photos into the realtime DB — they bloat the node (~458 KB each) and
+    // OOM-crash every device that loads the session. Only Storage URLs are allowed through;
+    // any data: URL still uploading is dropped here and re-synced once it becomes a URL.
+    if (Array.isArray(clean.photos)) clean.photos = clean.photos.filter(s => typeof s === 'string' && !/^data:/i.test(s));
     atFBDB.ref('stock_sessions/' + paSession.code + '/entries/' + key).set(clean);
   } catch(err){ console.warn('paSyncEntry failed:', err.message); }
+}
+// Upload an entry's photos to Firebase Storage, then replace the entry's local base64
+// dataURLs with the resulting download URLs and re-sync (URLs only — see paSyncEntry).
+async function paUploadEntryPhotos(entry, dataUrls){
+  if (!paSession || !atFBReady || !atFBStorage || !Array.isArray(dataUrls) || !dataUrls.length) return;
+  const key = paEntryKey(entry);
+  const urls = [];
+  for (let i = 0; i < dataUrls.length; i++){
+    const d = dataUrls[i];
+    if (typeof d !== 'string') continue;
+    if (/^https?:/i.test(d)) { urls.push(d); continue; } // already a Storage URL
+    try {
+      const ref = atFBStorage.ref('stock_sessions/' + paSession.code + '/' + key + '/' + i + '.jpg');
+      await ref.putString(d, 'data_url', { contentType: 'image/jpeg' });
+      urls.push(await ref.getDownloadURL());
+    } catch(err){ console.warn('photo upload failed:', err && err.message); }
+  }
+  if (!urls.length) return;
+  entry.photos = urls;            // swap base64 → Storage URLs (also frees local IndexedDB on next save)
+  savePA();
+  paSyncEntry(entry);             // now pushes http URLs to the shared session
+  if (typeof paCurrentTab !== 'undefined' && paCurrentTab === 'review') renderReview();
 }
 function paSyncRemove(key){
   if (!paSession || !atFBReady || !key) return;
@@ -1097,7 +1124,15 @@ function paApplyRemote(data){
     const r = data[k];
     const existing = byKey[k];
     const id = existing ? existing.id : paEid++;
-    next.push(Object.assign({}, r, { id: id, fbKey: k }));
+    const merged = Object.assign({}, r, { id: id, fbKey: k });
+    // The remote copy carries only Storage URLs (base64 is never synced). If this device
+    // captured the entry and still holds local base64 previews (upload in flight), keep them
+    // so the photos don't blank out on reconcile.
+    if (existing && Array.isArray(existing.photos) && existing.photos.length &&
+        (!Array.isArray(merged.photos) || !merged.photos.length)) {
+      merged.photos = existing.photos;
+    }
+    next.push(merged);
   });
   next.sort((a,b) => (b.ts || b.id || 0) - (a.ts || a.id || 0));
   paEntries = next;
@@ -1791,8 +1826,10 @@ function paSubmit() {
   } else {
     saveBrandToDB(bmRecord);
   }
+  const newEntry=paEntries[0];const newPhotoSrcs=newEntry.photos.slice(); // keep local dataURLs for instant on-device display
   paClearForm();paPhotos=[];renderPAStrip();document.getElementById('pa-ai-btn').style.display='none';setPABar('');
-  savePA();paSyncEntry(paEntries[0]);renderQueue();updatePASummary();toast(`✅ ${brand} added → saved to Brand Master`);window.scrollTo({top:0,behavior:'smooth'});
+  savePA();paSyncEntry(newEntry);renderQueue();updatePASummary();toast(`✅ ${brand} added → saved to Brand Master`);window.scrollTo({top:0,behavior:'smooth'});
+  paUploadEntryPhotos(newEntry,newPhotoSrcs); // async: push photos to Storage, then re-sync as URLs
 }
 function paClearForm() {
   ['pa-brand','pa-mol','pa-pack','pa-batch','pa-expiry','pa-mrp','pa-qty','pa-mkt','pa-mfr','pa-auditor'].forEach(id=>{const el=document.getElementById(id);el.value='';el.classList.remove('ai-ok','exp-warn','exp-danger');});
@@ -1833,14 +1870,19 @@ function renderReview() {
   });
   const list=document.getElementById('pa-review-list');
   if(!rows.length){list.innerHTML=`<div class="empty"><span class="ei">${paEntries.length?'🔍':'📦'}</span><p>${paEntries.length?'No matches.':'Use Capture tab to add entries.'}</p></div>`;return;}
-  list.innerHTML=rows.map(e=>{
+  // Cap how many cards render at once. Building thousands of photo-laden cards crashes the tab;
+  // search + filter narrow large sessions. Show a banner when results are truncated.
+  const RENDER_CAP=100;
+  const shown=rows.slice(0,RENDER_CAP);
+  const moreNote=rows.length>RENDER_CAP?`<div style="text-align:center;font-size:0.72rem;color:var(--muted);padding:0.6rem">Showing ${RENDER_CAP} of ${rows.length} — use search or a filter to narrow down.</div>`:'';
+  list.innerHTML=shown.map(e=>{
     const st2=paComputeStatus(e);const es=expiryStatus(e.expiry);
     const expCls=es==='danger'?'exp-danger':es==='warn'?'exp-warn':es==='ok'?'exp-ok':'';
     const ps=e.qty!==''?e.qty:'—';const sysVal=e.sys!==''?e.sys:'—';
     const diff=e.sys!==''&&e.qty!==''?parseFloat(e.sys)-parseFloat(e.qty):null;
     const diffStr=diff===null?'—':(diff>0?'+':'')+diff;
     const diffCls=diff===null?'':diff>0?'pos':diff<0?'neg':'zero';
-    const photos=e.photos?.length?`<div class="ec-photos">${e.photos.map(s=>`<img class="ec-photo" src="${s}" onclick="openLB('${s}')">`).join('')}</div>`:'';
+    const photos=e.photos?.length?`<div class="ec-photos">${e.photos.map(s=>`<img class="ec-photo" loading="lazy" decoding="async" src="${s}" onclick="openLB('${s}')">`).join('')}</div>`:'';
     return `<div class="entry-card st-${st2}" id="ec-${e.id}">
       <div class="ec-top"><div><div class="ec-name">${e.brand}${e.edited?`<span class="edited-badge">Edited</span>`:''}</div><div class="ec-mol">${e.molecule||'—'}</div></div>${paStatusPill(st2)}</div>
       ${photos}
@@ -1868,7 +1910,7 @@ function renderReview() {
         <button class="ec-btn eb-del" onclick="confirmPaDelete(${e.id})">✕</button>
       </div>
     </div>`;
-  }).join('');
+  }).join('')+moreNote;
 }
 function setSys(id,val) {
   const e=paEntries.find(x=>x.id===id);if(!e)return;
@@ -2011,6 +2053,7 @@ const AT_FB_CONFIG = {
 
 let atFBApp = null;
 let atFBDB = null;
+let atFBStorage = null;
 let atFBReady = false;
 
 // Audit state
@@ -2040,6 +2083,7 @@ function atInitFirebase() {
       atFBApp = firebase.apps.find(a => a.name === 'audit-app') || firebase.initializeApp(AT_FB_CONFIG, 'audit-app');
     }
     atFBDB = firebase.database(atFBApp);
+    try { atFBStorage = firebase.storage(atFBApp); } catch(se){ atFBStorage = null; console.warn('Storage init failed:', se && se.message); }
     // Security rules require an authenticated user. Sign in anonymously before any read/write,
     // and only mark Firebase ready once auth resolves (otherwise every write is permission-denied).
     atSetFBStatus('connecting', 'Connecting...');

@@ -12,6 +12,7 @@ The app is now built to run as a hosted site, not a local file:
 - **The Anthropic key never reaches the browser.** Both AI calls now go to `/api/anthropic` (a serverless proxy) using a shared **Pharmacy Access Code** instead of pasting the real key. The proxy holds the key and the current model IDs server-side.
 - **Audit database is locked down** with `database.rules.json` + Firebase Anonymous Auth (no more world-readable DB; session codes can't be enumerated).
 - **Day-one fixes:** current model IDs (the old ones were retired and would 404), PharmAudit entries now survive a refresh (saved to IndexedDB), and photos are compressed before upload so they don't blow past serverless size/time limits.
+- **Stock Loader photos live in Firebase Storage, not the database.** Shared sessions previously embedded each photo as base64 inside the synced entry — a large count (e.g. 1,763 entries) grew the session to hundreds of MB and crash-reloaded every device that opened it. Photos now upload to Storage and the session syncs only a small URL + the entry's data. Requires the Storage setup in step 2.7.
 
 File layout:
 ```
@@ -19,6 +20,7 @@ index.html            # the app (served at /)
 api/anthropic.js      # serverless proxy — key + models pinned server-side, access-code gated
 vercel.json           # function timeout
 database.rules.json   # Firebase Realtime DB security rules
+storage.rules         # Firebase Storage security rules (Stock Loader photos)
 .env.example          # which env vars to set in Vercel
 ```
 
@@ -36,8 +38,9 @@ database.rules.json   # Firebase Realtime DB security rules
 3. **Build → Authentication → Get started → Sign-in method → enable Anonymous.**
 4. **Project settings (gear) → General → Your apps → Web app (`</>`)** → register → copy the `firebaseConfig` object.
 5. Paste those values into `AT_FB_CONFIG` near the top of the audit section in `index.html` (replace every `REPLACE_WITH_...`). This config is **not** a secret — security comes from the rules + auth.
-6. Deploy the security rules: in the Realtime Database → **Rules** tab, paste the contents of `database.rules.json` and **Publish**.
+6. Deploy the security rules: in the Realtime Database → **Rules** tab, paste the contents of `database.rules.json` and **Publish**. (The rules now cover **both** `audit_sessions` and the new `stock_sessions` node.) If you deployed an earlier version, **re-publish** — paste the updated `database.rules.json` again so the shared stock sessions are protected.
    - *(Optional, recommended in week one)* enable **App Check** (reCAPTCHA) on the Realtime Database for stronger protection of the inventory data.
+7. **Build → Storage → Get started** (start in *locked mode*, same region). Then **Storage → Rules** tab → paste the contents of `storage.rules` and **Publish**. Stock Loader photos now live in Storage (not the database), so this step is required or photos won't upload/display. Anonymous Auth (step 3) must be enabled for the rules to allow access.
 
 ## 3. Put the code on GitHub **[you]**
 
@@ -77,6 +80,8 @@ Staff open the URL, and the first time they use an AI feature they enter the **P
 - [ ] **Multi-photo:** take 3 full-res photos and extract → succeeds (proves compression keeps it under limits).
 - [ ] **No data loss:** add several PharmAudit entries → hard-refresh the page → entries are still there.
 - [ ] **Audit sync:** on two phones, create a session on one and join with the code on the other → entries appear live on both. The Firebase status dot shows "Live".
+- [ ] **Shared stock session:** on one phone, open the Opening Stock Loader → tap "Start shared" → note the code. On a second phone, Stock Loader → "Join" → enter the code → entries (and photos) added on either phone appear on both within a second or two.
+- [ ] **Photos go to Storage, not the DB:** with DevTools Network open, add an entry with a photo in a shared session → confirm the photo uploads to `firebasestorage.googleapis.com` and the synced DB entry's `photos` holds an `https://…` URL (no giant `data:` base64 written to the Realtime DB). Large sessions stay "Live" and don't reload/crash.
 - [ ] **DB locked:** in the Firebase console, the rules are Published; an attempt to read the database root is denied.
 - [ ] **Spend cap** is set in the Anthropic console.
 
