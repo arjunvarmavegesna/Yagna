@@ -589,6 +589,9 @@ table.data-tbl tr:hover td{background:var(--bg)}
         <option value="sys-hi">SYS&gt;PS</option><option value="sys-lo">SYS&lt;PS</option>
         <option value="expired">Expired</option><option value="ghost">Phys Only</option>
       </select>
+      <select style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:0.45rem 0.65rem;font-family:'Space Grotesk',sans-serif;font-size:0.78rem;color:var(--text);outline:none;-webkit-appearance:none;appearance:none;background-image:url(&quot;data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%238a8278' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E&quot;);background-repeat:no-repeat;background-position:right 0.6rem center;padding-right:1.8rem" id="pa-sort" onchange="renderReview()">
+        <option value="az">A → Z</option><option value="za">Z → A</option>
+      </select>
     </div>
     <div id="pa-review-list"></div>
     <button class="btn-amber" id="pa-to-report-btn" disabled onclick="paTab('report')">📊 View Report &amp; Export</button>
@@ -1868,6 +1871,10 @@ function renderReview() {
     const ms=!q||e.brand.toLowerCase().includes(q)||(e.molecule||'').toLowerCase().includes(q);
     return ms&&(sf==='all'||cs===sf);
   });
+  // Sort alphabetically by brand (case-insensitive, natural number order so e.g. 250 < 1000).
+  // Direction comes from the A→Z / Z→A dropdown.
+  const sortDir=(document.getElementById('pa-sort')&&document.getElementById('pa-sort').value)||'az';
+  rows.sort((a,b)=>{const c=(a.brand||'').localeCompare(b.brand||'',undefined,{sensitivity:'base',numeric:true});return sortDir==='za'?-c:c;});
   const list=document.getElementById('pa-review-list');
   if(!rows.length){list.innerHTML=`<div class="empty"><span class="ei">${paEntries.length?'🔍':'📦'}</span><p>${paEntries.length?'No matches.':'Use Capture tab to add entries.'}</p></div>`;return;}
   // Cap how many cards render at once. Building thousands of photo-laden cards crashes the tab;
