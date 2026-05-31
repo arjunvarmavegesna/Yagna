@@ -896,6 +896,7 @@ let mmFilterMode = 'all';
 // PharmAudit
 let paEntries = [];
 let paEid = 1;
+let paCardSigs = {}; // entry id -> last-rendered card signature (for in-place Review reconcile)
 let paPhotos = [];
 let paEditingId = null;
 let paDeletingId = null;
@@ -1863,34 +1864,24 @@ function paStatusPill(st) {
   const m={pending:['pill-muted','⏳ Pending'],eq:['pill-ok','✓ SYS=PS'],'sys-hi':['pill-warn','↑ SYS>PS'],'sys-lo':['pill-blue','↓ SYS<PS'],expired:['pill-err','⚠ Expired'],ghost:['pill-muted','👻 Phys Only']};
   const[cls,lbl]=m[st]||m.pending;return`<span class="pill ${cls}">${lbl}</span>`;
 }
-function renderReview() {
-  const q=(document.getElementById('pa-search').value||'').toLowerCase();
-  const sf=document.getElementById('pa-filter').value;
-  const rows=paEntries.filter(e=>{
-    const cs=paComputeStatus(e);
-    const ms=!q||e.brand.toLowerCase().includes(q)||(e.molecule||'').toLowerCase().includes(q);
-    return ms&&(sf==='all'||cs===sf);
-  });
-  // Sort alphabetically by brand (case-insensitive, natural number order so e.g. 250 < 1000).
-  // Direction comes from the A→Z / Z→A dropdown.
-  const sortDir=(document.getElementById('pa-sort')&&document.getElementById('pa-sort').value)||'az';
-  rows.sort((a,b)=>{const c=(a.brand||'').localeCompare(b.brand||'',undefined,{sensitivity:'base',numeric:true});return sortDir==='za'?-c:c;});
-  const list=document.getElementById('pa-review-list');
-  if(!rows.length){list.innerHTML=`<div class="empty"><span class="ei">${paEntries.length?'🔍':'📦'}</span><p>${paEntries.length?'No matches.':'Use Capture tab to add entries.'}</p></div>`;return;}
-  // Cap how many cards render at once. Building thousands of photo-laden cards crashes the tab;
-  // search + filter narrow large sessions. Show a banner when results are truncated.
-  const RENDER_CAP=100;
-  const shown=rows.slice(0,RENDER_CAP);
-  const moreNote=rows.length>RENDER_CAP?`<div style="text-align:center;font-size:0.72rem;color:var(--muted);padding:0.6rem">Showing ${RENDER_CAP} of ${rows.length} — use search or a filter to narrow down.</div>`:'';
-  list.innerHTML=shown.map(e=>{
-    const st2=paComputeStatus(e);const es=expiryStatus(e.expiry);
-    const expCls=es==='danger'?'exp-danger':es==='warn'?'exp-warn':es==='ok'?'exp-ok':'';
-    const ps=e.qty!==''?e.qty:'—';const sysVal=e.sys!==''?e.sys:'—';
-    const diff=e.sys!==''&&e.qty!==''?parseFloat(e.sys)-parseFloat(e.qty):null;
-    const diffStr=diff===null?'—':(diff>0?'+':'')+diff;
-    const diffCls=diff===null?'':diff>0?'pos':diff<0?'neg':'zero';
-    const photos=e.photos?.length?`<div class="ec-photos">${e.photos.map(s=>`<img class="ec-photo" loading="lazy" decoding="async" src="${s}" onclick="openLB('${s}')">`).join('')}</div>`:'';
-    return `<div class="entry-card st-${st2}" id="ec-${e.id}">
+// Signature of everything that affects a card's rendered output. If this is unchanged between
+// renders we leave the existing DOM node (and its <img> elements) alone — that's what stops the
+// Review list blinking on every Firebase echo.
+function paCardSig(e){
+  return [e.brand,e.molecule,e.category,e.packSize,e.batch,e.expiry,e.mrp,e.schedule,e.marketedBy,
+    e.mfr,e.remark,e.qty,e.sys,e.auditor,e.time,e.edited?1:0,paComputeStatus(e),
+    (e.photos||[]).join('|')].join('');
+}
+// Build the HTML for a single Review card. Markup is identical to the old inline .map() body.
+function paCardHTML(e){
+  const st2=paComputeStatus(e);const es=expiryStatus(e.expiry);
+  const expCls=es==='danger'?'exp-danger':es==='warn'?'exp-warn':es==='ok'?'exp-ok':'';
+  const ps=e.qty!==''?e.qty:'—';const sysVal=e.sys!==''?e.sys:'—';
+  const diff=e.sys!==''&&e.qty!==''?parseFloat(e.sys)-parseFloat(e.qty):null;
+  const diffStr=diff===null?'—':(diff>0?'+':'')+diff;
+  const diffCls=diff===null?'':diff>0?'pos':diff<0?'neg':'zero';
+  const photos=e.photos?.length?`<div class="ec-photos">${e.photos.map(s=>`<img class="ec-photo" loading="lazy" decoding="async" src="${s}" onclick="openLB('${s}')">`).join('')}</div>`:'';
+  return `<div class="entry-card st-${st2}" id="ec-${e.id}">
       <div class="ec-top"><div><div class="ec-name">${e.brand}${e.edited?`<span class="edited-badge">Edited</span>`:''}</div><div class="ec-mol">${e.molecule||'—'}</div></div>${paStatusPill(st2)}</div>
       <div style="font-size:0.68rem;color:var(--muted);margin:0.15rem 0 0.5rem">👤 ${e.auditor||'—'}${e.time?` · 🕒 ${e.time}`:''}</div>
       ${photos}
@@ -1918,7 +1909,53 @@ function renderReview() {
         <button class="ec-btn eb-del" onclick="confirmPaDelete(${e.id})">✕</button>
       </div>
     </div>`;
-  }).join('')+moreNote;
+}
+function renderReview() {
+  const q=(document.getElementById('pa-search').value||'').toLowerCase();
+  const sf=document.getElementById('pa-filter').value;
+  const rows=paEntries.filter(e=>{
+    const cs=paComputeStatus(e);
+    const ms=!q||e.brand.toLowerCase().includes(q)||(e.molecule||'').toLowerCase().includes(q);
+    return ms&&(sf==='all'||cs===sf);
+  });
+  // Sort alphabetically by brand (case-insensitive, natural number order so e.g. 250 < 1000).
+  // Direction comes from the A→Z / Z→A dropdown.
+  const sortDir=(document.getElementById('pa-sort')&&document.getElementById('pa-sort').value)||'az';
+  rows.sort((a,b)=>{const c=(a.brand||'').localeCompare(b.brand||'',undefined,{sensitivity:'base',numeric:true});return sortDir==='za'?-c:c;});
+  const list=document.getElementById('pa-review-list');
+  if(!rows.length){list.innerHTML=`<div class="empty"><span class="ei">${paEntries.length?'🔍':'📦'}</span><p>${paEntries.length?'No matches.':'Use Capture tab to add entries.'}</p></div>`;paCardSigs={};return;}
+  // Cap how many cards render at once. Building thousands of photo-laden cards crashes the tab;
+  // search + filter narrow large sessions. Show a banner when results are truncated.
+  const RENDER_CAP=100;
+  const shown=rows.slice(0,RENDER_CAP);
+  // Reconcile in place instead of rebuilding the whole list. The Firebase listener fires on every
+  // write (this device's own echoes + other auditors' edits), so a full innerHTML rebuild would
+  // recreate every <img> and make the screen blink. Here we only touch cards that actually changed
+  // (by signature) and move existing nodes for re-sorts — unchanged photos are never re-created.
+  const wantIds=new Set(shown.map(e=>'ec-'+e.id));
+  Array.from(list.children).forEach(node=>{
+    if(node.id&&node.id.indexOf('ec-')===0){ if(!wantIds.has(node.id)){ delete paCardSigs[node.id.slice(3)]; node.remove(); } }
+    else node.remove(); // stale empty-state placeholder or the "showing N of M" note
+  });
+  let prev=null;
+  shown.forEach(e=>{
+    const domId='ec-'+e.id;const sig=paCardSig(e);
+    let node=document.getElementById(domId);
+    if(!node||paCardSigs[e.id]!==sig){
+      const tmp=document.createElement('div');tmp.innerHTML=paCardHTML(e);const fresh=tmp.firstElementChild;
+      if(node)list.replaceChild(fresh,node);
+      node=fresh;paCardSigs[e.id]=sig;
+    }
+    const expectedNext=prev?prev.nextSibling:list.firstChild;
+    if(node!==expectedNext)list.insertBefore(node,expectedNext);
+    prev=node;
+  });
+  if(rows.length>RENDER_CAP){
+    const mn=document.createElement('div');mn.id='pa-more-note';
+    mn.style.cssText='text-align:center;font-size:0.72rem;color:var(--muted);padding:0.6rem';
+    mn.textContent=`Showing ${RENDER_CAP} of ${rows.length} — use search or a filter to narrow down.`;
+    list.appendChild(mn);
+  }
 }
 function setSys(id,val) {
   const e=paEntries.find(x=>x.id===id);if(!e)return;
