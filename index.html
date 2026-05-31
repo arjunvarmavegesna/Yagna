@@ -594,13 +594,14 @@ table.data-tbl tr:hover td{background:var(--bg)}
       </select>
     </div>
     <div id="pa-review-list"></div>
+    <button class="btn-amber" id="pa-review-export-btn" disabled onclick="paExport()">⬇ Export to Excel (all entries)</button>
     <button class="btn-amber" id="pa-to-report-btn" disabled onclick="paTab('report')">📊 View Report &amp; Export</button>
   </div>
 
   <!-- PA REPORT -->
   <div id="pa-view-report" style="display:none" class="page">
     <div id="pa-report-sheets"></div>
-    <button class="btn-amber" id="pa-export-btn" style="display:none" onclick="paExport()">⬇ Export 5-Sheet Excel</button>
+    <button class="btn-amber" id="pa-export-btn" style="display:none" onclick="paExport()">⬇ Export Excel</button>
   </div>
 </div>
 
@@ -1976,6 +1977,7 @@ function updatePASummary() {
   document.getElementById('pa-hdr-n').textContent=total;
   document.getElementById('pa-prog').style.width=total?((total-pend)/total*100)+'%':'0%';
   document.getElementById('pa-to-report-btn').disabled=total===0;
+  const rvExBtn=document.getElementById('pa-review-export-btn');if(rvExBtn)rvExBtn.disabled=total===0;
   const paExBtn=document.getElementById('pa-export-btn');if(paExBtn)paExBtn.style.display=total>0?'flex':'none';
 }
 // PA Edit
@@ -2051,12 +2053,23 @@ function paExport() {
   const wb=XLSX.utils.book_new();
   const sumData=[['PHARMAUDIT — YAJNA MED SOLUTIONS'],[`Date: ${today}`],[''],['Status','Count'],['Total',paEntries.length],...sheets.map(s=>[s.name,paEntries.filter(s.filter).length]),['Pending',paEntries.filter(e=>paComputeStatus(e)==='pending').length]];
   const wsS=XLSX.utils.aoa_to_sheet(sumData);wsS['!cols']=[{wch:20},{wch:12}];XLSX.utils.book_append_sheet(wb,wsS,'Summary');
+  // "All Entries" sheet — every entry (incl. pending, which the per-status sheets below omit),
+  // one column per field shown on a Review card. Sorted by brand to match the Review list.
+  const STATUS_LABEL={eq:'SYS=PS','sys-hi':'SYS>PS','sys-lo':'SYS<PS',expired:'Expired',ghost:'Physical Only',pending:'Pending'};
+  const allHdrs=['#','Brand','Composition','Category','Pack Size','Batch','Expiry','MRP','PS','SYS','Variance','Status','Schedule','Marketed By','Mfd For','Auditor','Photos','Remark','Edited','Time'];
+  const allRows=paEntries.slice()
+    .sort((a,b)=>(a.brand||'').localeCompare(b.brand||'',undefined,{sensitivity:'base',numeric:true}))
+    .map((e,i)=>{const ps=parseFloat(e.qty)||0,sys=parseFloat(e.sys)||0;const v=e.sys!==''&&e.qty!==''?sys-ps:'';
+      return[i+1,e.brand,e.molecule,e.category,e.packSize,e.batch,e.expiry,e.mrp?parseFloat(e.mrp):'',ps||'',e.sys!==''?parseFloat(e.sys):'',v,STATUS_LABEL[paComputeStatus(e)]||'',e.schedule,e.marketedBy,e.mfr,e.auditor,(e.photos||[]).length,e.remark,e.edited?'Yes':'No',e.time];});
+  const wsAll=XLSX.utils.aoa_to_sheet([allHdrs,...allRows]);
+  wsAll['!cols']=[{wch:4},{wch:22},{wch:32},{wch:11},{wch:14},{wch:11},{wch:10},{wch:9},{wch:8},{wch:8},{wch:8},{wch:12},{wch:8},{wch:26},{wch:26},{wch:13},{wch:7},{wch:18},{wch:6},{wch:7}];
+  XLSX.utils.book_append_sheet(wb,wsAll,'All Entries');
   sheets.forEach(s=>{
     const rows=paEntries.filter(s.filter).map((e,i)=>{const ps=parseFloat(e.qty)||0,sys=parseFloat(e.sys)||0;const v=e.sys!==''&&e.qty!==''?sys-ps:'';return[i+1,e.brand,e.molecule,e.category,e.packSize,e.batch,e.expiry,e.mrp?parseFloat(e.mrp):'',ps||'',e.sys!==''?parseFloat(e.sys):'',v,e.schedule,e.marketedBy,e.mfr,e.auditor,e.remark,e.edited?'Yes':'No',e.time];});
     const ws=XLSX.utils.aoa_to_sheet([hdrs,...rows]);ws['!cols']=[{wch:4},{wch:22},{wch:32},{wch:11},{wch:14},{wch:11},{wch:10},{wch:9},{wch:8},{wch:8},{wch:8},{wch:8},{wch:26},{wch:26},{wch:13},{wch:18},{wch:6},{wch:7}];
     XLSX.utils.book_append_sheet(wb,ws,s.name);
   });
-  XLSX.writeFile(wb,`PharmAudit_${new Date().toISOString().slice(0,10)}.xlsx`);toast('📊 5-Sheet Excel exported!');
+  XLSX.writeFile(wb,`PharmAudit_${new Date().toISOString().slice(0,10)}.xlsx`);toast('📊 Excel exported!');
 }
 
 // ══════════════════════════════════════════════════════
