@@ -2052,9 +2052,9 @@ function paExport() {
   const hdrs=['#','Brand','Molecule','Category','Pack Size','Batch','Expiry','MRP','PS','SYS','Variance','Schedule','Marketed By','Mfd For','Auditor','Remark','Edited','Time'];
   const wb=XLSX.utils.book_new();
   const sumData=[['PHARMAUDIT — YAJNA MED SOLUTIONS'],[`Date: ${today}`],[''],['Status','Count'],['Total',paEntries.length],...sheets.map(s=>[s.name,paEntries.filter(s.filter).length]),['Pending',paEntries.filter(e=>paComputeStatus(e)==='pending').length]];
-  const wsS=XLSX.utils.aoa_to_sheet(sumData);wsS['!cols']=[{wch:20},{wch:12}];XLSX.utils.book_append_sheet(wb,wsS,'Summary');
-  // "All Entries" sheet — every entry (incl. pending, which the per-status sheets below omit),
-  // one column per field shown on a Review card. Sorted by brand to match the Review list.
+  // "All Entries" sheet FIRST so the workbook opens straight onto every entry. Includes pending
+  // (which the per-status sheets below omit); one column per field shown on a Review card,
+  // sorted by brand to match the Review list.
   const STATUS_LABEL={eq:'SYS=PS','sys-hi':'SYS>PS','sys-lo':'SYS<PS',expired:'Expired',ghost:'Physical Only',pending:'Pending'};
   const allHdrs=['#','Brand','Composition','Category','Pack Size','Batch','Expiry','MRP','PS','SYS','Variance','Status','Schedule','Marketed By','Mfd For','Auditor','Photos','Remark','Edited','Time'];
   const allRows=paEntries.slice()
@@ -2064,12 +2064,17 @@ function paExport() {
   const wsAll=XLSX.utils.aoa_to_sheet([allHdrs,...allRows]);
   wsAll['!cols']=[{wch:4},{wch:22},{wch:32},{wch:11},{wch:14},{wch:11},{wch:10},{wch:9},{wch:8},{wch:8},{wch:8},{wch:12},{wch:8},{wch:26},{wch:26},{wch:13},{wch:7},{wch:18},{wch:6},{wch:7}];
   XLSX.utils.book_append_sheet(wb,wsAll,'All Entries');
+  const wsS=XLSX.utils.aoa_to_sheet(sumData);wsS['!cols']=[{wch:20},{wch:12}];XLSX.utils.book_append_sheet(wb,wsS,'Summary');
   sheets.forEach(s=>{
     const rows=paEntries.filter(s.filter).map((e,i)=>{const ps=parseFloat(e.qty)||0,sys=parseFloat(e.sys)||0;const v=e.sys!==''&&e.qty!==''?sys-ps:'';return[i+1,e.brand,e.molecule,e.category,e.packSize,e.batch,e.expiry,e.mrp?parseFloat(e.mrp):'',ps||'',e.sys!==''?parseFloat(e.sys):'',v,e.schedule,e.marketedBy,e.mfr,e.auditor,e.remark,e.edited?'Yes':'No',e.time];});
     const ws=XLSX.utils.aoa_to_sheet([hdrs,...rows]);ws['!cols']=[{wch:4},{wch:22},{wch:32},{wch:11},{wch:14},{wch:11},{wch:10},{wch:9},{wch:8},{wch:8},{wch:8},{wch:8},{wch:26},{wch:26},{wch:13},{wch:18},{wch:6},{wch:7}];
     XLSX.utils.book_append_sheet(wb,ws,s.name);
   });
-  XLSX.writeFile(wb,`PharmAudit_${new Date().toISOString().slice(0,10)}.xlsx`);toast('📊 Excel exported!');
+  // Time-stamp the filename so re-exports don't collide (browser would otherwise append " (1)"
+  // and you'd risk opening a stale file).
+  const d=new Date();const p=n=>String(n).padStart(2,'0');
+  const stamp=`${d.toISOString().slice(0,10)}_${p(d.getHours())}${p(d.getMinutes())}${p(d.getSeconds())}`;
+  XLSX.writeFile(wb,`PharmAudit_${stamp}.xlsx`);toast('📊 Excel exported!');
 }
 
 // ══════════════════════════════════════════════════════
