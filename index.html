@@ -1892,6 +1892,7 @@ function renderReview() {
     const photos=e.photos?.length?`<div class="ec-photos">${e.photos.map(s=>`<img class="ec-photo" loading="lazy" decoding="async" src="${s}" onclick="openLB('${s}')">`).join('')}</div>`:'';
     return `<div class="entry-card st-${st2}" id="ec-${e.id}">
       <div class="ec-top"><div><div class="ec-name">${e.brand}${e.edited?`<span class="edited-badge">Edited</span>`:''}</div><div class="ec-mol">${e.molecule||'—'}</div></div>${paStatusPill(st2)}</div>
+      <div style="font-size:0.68rem;color:var(--muted);margin:0.15rem 0 0.5rem">👤 ${e.auditor||'—'}${e.time?` · 🕒 ${e.time}`:''}</div>
       ${photos}
       <div class="ec-grid">
         <div class="ec-field"><div class="ec-lbl">Category</div><div class="ec-val st-text">${e.category||'—'}</div></div>
